@@ -13,6 +13,7 @@ export default async function VentasPage() {
     include: {
       cliente: { select: { nombre: true, identificacion: true } },
       factura: { select: { estado: true, numeroAutorizacion: true } },
+      notaCredito: { select: { estado: true } },
       _count: { select: { items: true } },
     },
     orderBy: { fecha: 'desc' },
@@ -28,6 +29,7 @@ export default async function VentasPage() {
     formaPago: v.formaPago,
     requiereFactura: v.requiereFactura,
     facturaEstado: v.factura?.estado ?? null,
+    notaCreditoEstado: v.notaCredito?.estado ?? null,
     estado: v.estado,
     fecha: v.fecha.toISOString(),
   }))

@@ -296,6 +296,7 @@ model Venta {
 
   items       VentaItem[]
   factura     FacturaSRI?
+  notaCredito NotaCredito?
 
   @@index([tenantId])
   @@index([clienteId])
@@ -414,4 +415,26 @@ model FacturaSRI {
 
   @@index([tenantId])
   @@map("facturas_sri")
+}
+
+// Nota de crédito: anula/modifica una factura ya autorizada por el SRI (codDoc 04)
+model NotaCredito {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  ventaId            String    @unique // factura/venta que modifica
+  venta              Venta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+
+  claveAcceso        String    @db.VarChar(49)
+  numeroAutorizacion String?   @db.VarChar(49)
+  estado             String    @default("PENDIENTE") @db.VarChar(20) // PENDIENTE/AUTORIZADA/RECHAZADA
+  motivo             String    @db.VarChar(300)
+  valorModificacion  Decimal   @db.Decimal(12, 2)
+  xmlFirmado         String?   @db.LongText
+  mensajeError       String?   @db.Text
+  fechaAutorizacion  DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@map("notas_credito")
 }

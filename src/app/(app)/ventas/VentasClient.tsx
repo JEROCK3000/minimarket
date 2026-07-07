@@ -1,16 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { Receipt, FileText, Loader2, CheckCircle2, AlertCircle, Clock, Download, Mail, Eye, Ban } from 'lucide-react'
+import { Receipt, FileText, Loader2, CheckCircle2, AlertCircle, Clock, Download, Mail, Eye, Ban, FileMinus } from 'lucide-react'
 import { toast } from 'sonner'
 import { emitirFacturaVentaAction } from './sri-actions'
 import { descargarRideAction, enviarFacturaEmailAction } from './factura-actions'
 import { anularVentaAction } from './actions'
 import { obtenerVistaPreviaFacturaAction } from './preview-actions'
+import { emitirNotaCreditoAction } from './nc-actions'
 
 interface VentaRow {
   id: string; numero: string; cliente: string; items: number; total: number
-  formaPago: string; requiereFactura: boolean; facturaEstado: string | null; estado: string; fecha: string
+  formaPago: string; requiereFactura: boolean; facturaEstado: string | null
+  notaCreditoEstado: string | null; estado: string; fecha: string
 }
 
 export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: VentaRow[]; hayEmisor: boolean; puedeAnular: boolean }) {
@@ -18,6 +20,8 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
   const [accion, setAccion] = useState<string | null>(null)
   const [preview, setPreview] = useState<any>(null)
   const [confirmarAnular, setConfirmarAnular] = useState<VentaRow | null>(null)
+  const [notaCredito, setNotaCredito] = useState<VentaRow | null>(null)
+  const [motivoNC, setMotivoNC] = useState('')
   const money = (n: number) => `$${n.toFixed(2)}`
   const fecha = (iso: string) => new Date(iso).toLocaleString('es-EC', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -85,7 +89,24 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
     try { await prom } catch {} finally { setAccion(null); setConfirmarAnular(null) }
   }
 
+  const emitirNC = async () => {
+    if (!notaCredito) return
+    if (motivoNC.trim().length < 3) { toast.error('Indica el motivo de la nota de crédito'); return }
+    setAccion(notaCredito.id + '-nc')
+    const t = toast.loading('Emitiendo nota de crédito al SRI...')
+    try {
+      const r = await emitirNotaCreditoAction(notaCredito.id, motivoNC)
+      if (r.success) {
+        toast.success(`Nota de crédito autorizada. La factura queda anulada y el stock revertido.`, { id: t, duration: 8000 })
+        setNotaCredito(null); setMotivoNC('')
+      } else {
+        toast.error(r.error || 'No se pudo emitir la nota de crédito', { id: t, duration: 8000 })
+      }
+    } finally { setAccion(null) }
+  }
+
   const badge = (v: VentaRow) => {
+    if (v.notaCreditoEstado === 'AUTORIZADA') return <span className="inline-flex items-center gap-1 text-xs text-red-500 font-semibold"><FileMinus size={12} /> Nota de crédito</span>
     if (v.estado === 'ANULADA') return <span className="inline-flex items-center gap-1 text-xs text-red-500 font-semibold"><Ban size={12} /> Anulada</span>
     if (!v.requiereFactura) return <span className="inline-flex items-center gap-1 text-xs text-gray-400"><Receipt size={12} /> Ticket</span>
     switch (v.facturaEstado) {
@@ -161,6 +182,11 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                               <button onClick={() => enviarEmail(v.id)} disabled={accion === v.id + '-mail'} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition" title="Enviar por correo">
                                 {accion === v.id + '-mail' ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
                               </button>
+                              {puedeAnular && v.notaCreditoEstado !== 'AUTORIZADA' && (
+                                <button onClick={() => { setNotaCredito(v); setMotivoNC('') }} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500 transition" title="Emitir nota de crédito (anular factura)">
+                                  <FileMinus size={15} />
+                                </button>
+                              )}
                             </>
                           )}
                           {puedeAnularEsta && (
@@ -214,6 +240,33 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                 <div className="flex justify-between font-black text-gray-900 dark:text-white text-sm"><span>Total</span><span>${preview.totales.total.toFixed(2)}</span></div>
               </div>
               <p className="text-[11px] text-gray-400 pt-1">Esta es una proyección. El número definitivo se asigna al emitir al SRI.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal nota de crédito */}
+      {notaCredito && (
+        <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/50" onClick={() => setNotaCredito(null)}>
+          <div className="w-full max-w-md bg-white dark:bg-[#0f0f1e] rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-white/5">
+              <FileMinus size={18} className="text-red-500" />
+              <h2 className="font-bold text-gray-900 dark:text-white">Nota de crédito — {notaCredito.numero}</h2>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Esto emitirá una nota de crédito al SRI que <strong>anula la factura</strong> por {money(notaCredito.total)} y devuelve el stock al inventario. Es irreversible.
+              </p>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Motivo *</label>
+                <textarea value={motivoNC} onChange={(e) => setMotivoNC(e.target.value)} className="input min-h-[70px] py-2" maxLength={300} placeholder="Ej: Devolución de mercadería, error en la factura..." />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setNotaCredito(null)} className="btn-ghost">Cancelar</button>
+                <button onClick={emitirNC} disabled={accion === notaCredito.id + '-nc'} className="btn bg-red-600 hover:bg-red-700 text-white">
+                  {accion === notaCredito.id + '-nc' ? <Loader2 size={16} className="animate-spin" /> : <FileMinus size={16} />} Emitir nota de crédito
+                </button>
+              </div>
             </div>
           </div>
         </div>
