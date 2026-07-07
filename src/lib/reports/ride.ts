@@ -162,7 +162,9 @@ export function generarRidePDF(d: RideData): string {
   fila('SUBTOTAL SIN IMPUESTOS:', money(d.totales.subtotalSinImpuestos))
   fila('TOTAL DESCUENTO:', money(d.totales.descuento))
   fila('IVA 15%:', money(d.totales.iva))
-  doc.setDrawColor(180); doc.line(tX, tY - 1, vX, tY - 1); tY += 1
+  tY += 1.5
+  doc.setDrawColor(180); doc.line(tX, tY, vX, tY)
+  tY += 4.5
   fila('VALOR TOTAL:', money(d.totales.total), true)
 
   doc.setFontSize(7); doc.setTextColor(150)
