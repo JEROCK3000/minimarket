@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useMemo, useRef } from 'react'
-import { Search, ShoppingCart, Plus, Minus, Trash2, Receipt, FileText, Loader2, CheckCircle2, X } from 'lucide-react'
+import { Search, ShoppingCart, Plus, Minus, Trash2, Receipt, FileText, Loader2, CheckCircle2, X, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { registrarVentaAction, buscarClienteAction, crearClienteRapidoAction, actualizarClienteRapidoAction } from './actions'
 import { consultarIdentificacionAction } from '../clientes/actions'
+import { obtenerTicketAction } from './ticket-actions'
+import { imprimirTicket } from '@/lib/print/ticket'
 
 interface Prod {
   id: string; nombre: string; codigoBarras: string | null; categoriaNombre: string | null
@@ -391,6 +393,17 @@ function ClienteModal({ onClose, onSelect }: { onClose: () => void; onSelect: (c
 // ─── Modal: venta exitosa ─────────────────────────────────────────────────────
 function VentaExitosa({ venta, onClose }: { venta: any; onClose: () => void }) {
   const money = (n: number) => `$${n.toFixed(2)}`
+  const [imprimiendo, setImprimiendo] = useState<string | null>(null)
+
+  const imprimir = async (formato: 'termico' | 'a4') => {
+    setImprimiendo(formato)
+    try {
+      const res = await obtenerTicketAction(venta.id)
+      if ('ticket' in res) imprimirTicket(res.ticket, formato)
+      else toast.error(res.error || 'No se pudo generar el comprobante')
+    } finally { setImprimiendo(null) }
+  }
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/50" onClick={onClose}>
       <div className="w-full max-w-xs bg-white dark:bg-[#0f0f1e] rounded-2xl shadow-xl p-6 text-center" onClick={(e) => e.stopPropagation()}>
@@ -404,6 +417,17 @@ function VentaExitosa({ venta, onClose }: { venta: any; onClose: () => void }) {
           )}
           <div className="flex justify-between"><span className="text-gray-500">Comprobante</span><span className="font-semibold">{venta.requiereFactura ? 'Factura' : 'Ticket'}</span></div>
         </div>
+
+        {/* Impresión del comprobante */}
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <button onClick={() => imprimir('termico')} disabled={!!imprimiendo} className="btn-ghost text-xs h-9">
+            {imprimiendo === 'termico' ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Ticket
+          </button>
+          <button onClick={() => imprimir('a4')} disabled={!!imprimiendo} className="btn-ghost text-xs h-9">
+            {imprimiendo === 'a4' ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} A4
+          </button>
+        </div>
+
         {venta.requiereFactura && (
           <p className="text-[11px] text-gray-400 mb-3">La factura electrónica se emitirá al SRI desde el módulo de Ventas.</p>
         )}

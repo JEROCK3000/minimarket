@@ -1,13 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { Receipt, FileText, Loader2, CheckCircle2, AlertCircle, Clock, Download, Mail, Eye, Ban, FileMinus } from 'lucide-react'
+import { Receipt, FileText, Loader2, CheckCircle2, AlertCircle, Clock, Download, Mail, Eye, Ban, FileMinus, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { emitirFacturaVentaAction } from './sri-actions'
 import { descargarRideAction, enviarFacturaEmailAction, descargarRideNCAction, enviarNCEmailAction } from './factura-actions'
 import { anularVentaAction } from './actions'
 import { obtenerVistaPreviaFacturaAction } from './preview-actions'
 import { emitirNotaCreditoAction } from './nc-actions'
+import { obtenerTicketAction } from '../pos/ticket-actions'
+import { imprimirTicket } from '@/lib/print/ticket'
 
 interface VentaRow {
   id: string; numero: string; cliente: string; clienteEmail: string; items: number; total: number
@@ -74,6 +76,15 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
         : await enviarFacturaEmailAction(enviarModal.id, emailDestino.trim())
       if (r.success) { toast.success(`Enviado a ${r.email}`, { id: t }); setEnviarModal(null) }
       else toast.error(r.error || 'No se pudo enviar', { id: t })
+    } finally { setAccion(null) }
+  }
+
+  const reimprimir = async (id: string, formato: 'termico' | 'a4') => {
+    setAccion(id + '-print')
+    try {
+      const res = await obtenerTicketAction(id)
+      if ('ticket' in res) imprimirTicket(res.ticket, formato)
+      else toast.error(res.error || 'No se pudo generar el comprobante')
     } finally { setAccion(null) }
   }
 
@@ -186,6 +197,11 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                       <td className="px-4 py-3">{badge(v)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {!anulada && (
+                            <button onClick={() => reimprimir(v.id, 'termico')} disabled={accion === v.id + '-print'} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition" title="Imprimir ticket (térmico)">
+                              {accion === v.id + '-print' ? <Loader2 size={15} className="animate-spin" /> : <Printer size={15} />}
+                            </button>
+                          )}
                           {puedeEmitir && (
                             <>
                               <button onClick={() => verPrevia(v.id)} disabled={accion === v.id + '-prev'} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition" title="Vista previa de la factura">
