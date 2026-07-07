@@ -39,18 +39,47 @@ async function construirRide(tenantId: string, ventaId: string) {
   const seq = venta.factura.claveAcceso.substring(30, 39)
   const numeroFactura = `${estab}-${ptoEmi}-${seq}`
 
+  // Desglose de subtotales por tarifa de IVA (15% vs 0%/exento)
+  let subtotal15 = 0, subtotal0 = 0
+  for (const it of venta.items) {
+    const base = Number(it.subtotal)
+    if (Number(it.producto.ivaPorcentaje) > 0) subtotal15 += base
+    else subtotal0 += base
+  }
+  const subtotalSinImpuestos = Number(venta.subtotal) - Number(venta.descuento)
+
   const pdfBase64 = generarRidePDF({
-    emisor: { razonSocial: emisor.razonSocial, nombreComercial: emisor.nombreComercial, ruc: emisor.ruc, dirMatriz: emisor.dirMatriz, ambiente: emisor.ambiente },
+    emisor: {
+      razonSocial: emisor.razonSocial, nombreComercial: emisor.nombreComercial, ruc: emisor.ruc,
+      dirMatriz: emisor.dirMatriz, dirEstablecimiento: emisor.dirEstablecimiento,
+      obligadoContabilidad: emisor.obligadoContabilidad, ambiente: emisor.ambiente,
+    },
     factura: {
       numero: numeroFactura,
       claveAcceso: venta.factura.claveAcceso,
       numeroAutorizacion: venta.factura.numeroAutorizacion,
       fechaAutorizacion: venta.factura.fechaAutorizacion,
       fechaEmision: format(venta.fecha, 'dd/MM/yyyy'),
+      formaPago: venta.formaPago,
     },
-    cliente: { nombre: venta.cliente?.nombre ?? 'CONSUMIDOR FINAL', identificacion: venta.cliente?.identificacion ?? '9999999999999' },
-    items: venta.items.map((it) => ({ descripcion: it.producto.nombre, cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), subtotal: Number(it.subtotal) })),
-    totales: { subtotal: Number(venta.subtotal), descuento: Number(venta.descuento), iva: Number(venta.iva), total: Number(venta.total) },
+    cliente: {
+      nombre: venta.cliente?.nombre ?? 'CONSUMIDOR FINAL',
+      identificacion: venta.cliente?.identificacion ?? '9999999999999',
+      direccion: venta.cliente?.direccion ?? null,
+      email: venta.cliente?.email ?? null,
+    },
+    items: venta.items.map((it) => ({
+      codigo: it.productoId.slice(-6),
+      descripcion: it.producto.nombre,
+      cantidad: Number(it.cantidad),
+      precioUnitario: Number(it.precioUnitario),
+      descuento: 0,
+      subtotal: Number(it.subtotal),
+    })),
+    totales: {
+      subtotal15, subtotal0, subtotalSinImpuestos,
+      descuento: Number(venta.descuento), iva: Number(venta.iva), total: Number(venta.total),
+    },
     logo: cargarLogo(emisor.logoPath),
   })
 
