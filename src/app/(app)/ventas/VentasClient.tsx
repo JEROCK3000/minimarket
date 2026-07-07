@@ -23,13 +23,20 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
 
   const emitir = async (id: string) => {
     setEmitiendo(id)
-    const prom = emitirFacturaVentaAction(id)
-    toast.promise(prom, {
-      loading: 'Emitiendo factura al SRI... (puede tardar unos segundos)',
-      success: (r: any) => `Factura autorizada por el SRI (Aut. ${r.numeroAutorizacion?.slice(0, 12)}...)`,
-      error: (e) => e.message || 'No se pudo emitir la factura',
-    })
-    try { await prom } catch {} finally { setEmitiendo(null) }
+    const t = toast.loading('Emitiendo factura al SRI... (puede tardar unos segundos)')
+    try {
+      const r: any = await emitirFacturaVentaAction(id)
+      if (r?.success) {
+        toast.success(`Factura autorizada por el SRI (Aut. ${r.numeroAutorizacion?.slice(0, 12)}...)`, { id: t })
+      } else {
+        // Mensaje real del SRI (ej. rechazos), no el genérico de Next
+        toast.error(r?.error || 'No se pudo emitir la factura', { id: t, duration: 8000 })
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo emitir la factura', { id: t })
+    } finally {
+      setEmitiendo(null)
+    }
   }
 
   const descargarPDF = async (id: string) => {

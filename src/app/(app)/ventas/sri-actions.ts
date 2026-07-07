@@ -206,6 +206,8 @@ export async function emitirFacturaVentaAction(ventaId: string) {
     throw new Error(`SRI Autorización Rechazada: ${txt}`)
   } catch (error: any) {
     await registrarLog('ERROR', 'VENTAS', `Error emitiendo factura: ${error.message || error}`, undefined, sesion.tenantId)
-    throw new Error(error.message || 'Error al emitir la factura')
+    // Devolver el error como valor (no throw): así el mensaje real del SRI
+    // llega al cliente. Con throw, Next lo oculta en producción.
+    return { error: error.message || 'Error al emitir la factura' }
   }
 }
