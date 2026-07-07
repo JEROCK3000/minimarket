@@ -387,6 +387,7 @@ model EmisorSRI {
   ambiente              Int      @default(1) // 1=pruebas, 2=producción
   passwordFirma         String   @db.VarChar(500) // CIFRADO (lib/security/crypto)
   rutaFirma             String   @db.VarChar(500)
+  logoPath              String?  @db.VarChar(500) // ruta del logo para el RIDE
   contribuyenteEspecial String?  @db.VarChar(20)
   agenteRetencion       String?  @db.VarChar(20)
   secuencialFactura     Int      @default(1)

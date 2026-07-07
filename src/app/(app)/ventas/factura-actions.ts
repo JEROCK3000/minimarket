@@ -6,6 +6,21 @@ import { registrarLog } from '@/lib/logs/logger'
 import { generarRidePDF } from '@/lib/reports/ride'
 import { enviarFacturaPorEmail } from '@/lib/utils/email'
 import { format } from 'date-fns'
+import { readFileSync, existsSync } from 'fs'
+
+/** Carga el logo del emisor desde disco y lo devuelve como base64 para el RIDE. */
+function cargarLogo(logoPath: string | null): { base64: string; formato: 'PNG' | 'JPEG' } | null {
+  if (!logoPath || !existsSync(logoPath)) return null
+  try {
+    const buf = readFileSync(logoPath)
+    const esPng = buf[0] === 0x89 && buf[1] === 0x50
+    const formato = esPng ? 'PNG' : 'JPEG'
+    const mime = esPng ? 'image/png' : 'image/jpeg'
+    return { base64: `data:${mime};base64,${buf.toString('base64')}`, formato }
+  } catch {
+    return null
+  }
+}
 
 /** Carga los datos y arma el RIDE en base64 de una venta con factura autorizada. */
 async function construirRide(tenantId: string, ventaId: string) {
@@ -36,6 +51,7 @@ async function construirRide(tenantId: string, ventaId: string) {
     cliente: { nombre: venta.cliente?.nombre ?? 'CONSUMIDOR FINAL', identificacion: venta.cliente?.identificacion ?? '9999999999999' },
     items: venta.items.map((it) => ({ descripcion: it.producto.nombre, cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), subtotal: Number(it.subtotal) })),
     totales: { subtotal: Number(venta.subtotal), descuento: Number(venta.descuento), iva: Number(venta.iva), total: Number(venta.total) },
+    logo: cargarLogo(emisor.logoPath),
   })
 
   return { pdfBase64, numeroFactura, venta, emisor }

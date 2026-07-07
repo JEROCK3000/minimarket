@@ -26,6 +26,7 @@ export default async function ConfiguracionPage() {
         ambiente: emisor.ambiente,
         passwordFirma: SECRETO_MASCARA, // nunca enviar el secreto real
         tieneFirma: !!emisor.rutaFirma,
+        tieneLogo: !!emisor.logoPath,
         contribuyenteEspecial: emisor.contribuyenteEspecial ?? '',
         agenteRetencion: emisor.agenteRetencion ?? '',
         secuencialFactura: emisor.secuencialFactura,

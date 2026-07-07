@@ -36,6 +36,22 @@ export async function guardarEmisorSRIAction(formData: FormData) {
     throw new Error('Debe subir el archivo de firma electrónica (.p12)')
   }
 
+  // Logo de la empresa (imagen PNG/JPG, para el RIDE)
+  let logoPath = actual?.logoPath ?? null
+  const archivoLogo = formData.get('logo') as File | null
+  if (archivoLogo && archivoLogo.size > 0) {
+    if (archivoLogo.size > 1024 * 1024) throw new Error('El logo no puede superar 1 MB')
+    const buf = Buffer.from(await archivoLogo.arrayBuffer())
+    // Magic bytes: PNG (89 50 4E 47) o JPEG (FF D8 FF)
+    const esPng = buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47
+    const esJpg = buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff
+    if (!esPng && !esJpg) throw new Error('El logo debe ser una imagen PNG o JPG')
+    const dir = join(process.cwd(), 'storage', 'logos')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    logoPath = join(dir, `${sesion.tenantId}.${esPng ? 'png' : 'jpg'}`)
+    writeFileSync(logoPath, buf)
+  }
+
   // Contraseña de firma: solo actualizar si escribieron una nueva (centinela conserva la existente)
   let passwordAlmacenar: string
   if (passwordFirma && passwordFirma !== SECRETO_MASCARA) {
@@ -58,6 +74,7 @@ export async function guardarEmisorSRIAction(formData: FormData) {
     ambiente: parseInt(g('ambiente'), 10) || 1,
     passwordFirma: passwordAlmacenar,
     rutaFirma,
+    logoPath,
     contribuyenteEspecial: g('contribuyenteEspecial') || null,
     agenteRetencion: g('agenteRetencion') || null,
     secuencialFactura: parseInt(g('secuencialFactura'), 10) || 1,

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, Save, ShieldCheck, Upload, Search } from 'lucide-react'
+import { Loader2, Save, ShieldCheck, Upload, Search, Image as ImageIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { guardarEmisorSRIAction } from './actions'
 
@@ -10,13 +10,14 @@ interface Config {
   dirMatriz: string; dirEstablecimiento: string
   codigoEstablecimiento: string; codigoPuntoEmision: string
   obligadoContabilidad: boolean; ambiente: number
-  passwordFirma: string; tieneFirma: boolean
+  passwordFirma: string; tieneFirma: boolean; tieneLogo: boolean
   contribuyenteEspecial: string; agenteRetencion: string; secuencialFactura: number
 }
 
 export function EmisorSRIForm({ config, ecuadorApiToken }: { config: Config | null; ecuadorApiToken: string }) {
   const [loading, setLoading] = useState(false)
   const [firmaNombre, setFirmaNombre] = useState('')
+  const [logoNombre, setLogoNombre] = useState('')
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -79,6 +80,20 @@ export function EmisorSRIForm({ config, ecuadorApiToken }: { config: Config | nu
           </div>
         </div>
         <p className="text-[11px] text-gray-400">La contraseña se guarda cifrada (AES-256) en la base de datos y nunca se muestra en claro.</p>
+      </div>
+
+      <div className="card space-y-4">
+        <h3 className="font-bold text-gray-900 dark:text-white text-sm border-b border-gray-100 dark:border-white/5 pb-2 flex items-center gap-2">
+          <ImageIcon size={16} className="text-brand-600" /> Logo de la empresa (para la factura RIDE)
+        </h3>
+        <div className={field}>
+          <label className={lbl}>Imagen del logo {config?.tieneLogo && <span className="text-green-600">(ya cargado)</span>}</label>
+          <label className="input flex items-center gap-2 cursor-pointer text-gray-500">
+            <Upload size={14} /> {logoNombre || (config?.tieneLogo ? 'Reemplazar logo...' : 'Subir logo (PNG o JPG)...')}
+            <input type="file" name="logo" accept="image/png,image/jpeg" className="hidden" onChange={(e) => setLogoNombre(e.target.files?.[0]?.name ?? '')} />
+          </label>
+          <p className="text-[11px] text-gray-400">PNG o JPG, máximo 1 MB. Se mostrará en la esquina superior de la factura impresa (RIDE).</p>
+        </div>
       </div>
 
       <div className="card space-y-4">
