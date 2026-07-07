@@ -6,7 +6,7 @@ import { registrarLog } from '@/lib/logs/logger'
 import { descifrarSecreto } from '@/lib/security/crypto'
 import { revalidatePath } from 'next/cache'
 import { getP12FromLocalFile, documentReception, documentAuthorization } from 'open-factura'
-import { signInvoiceXml } from 'ec-sri-invoice-signer'
+import { signCreditNoteXml } from 'ec-sri-invoice-signer'
 import { format } from 'date-fns'
 import { ENDPOINTS_SRI, mapTipoIdentificacion, generarClaveAcceso } from '@/lib/sri/helpers'
 import { generarXmlNotaCredito } from '@/lib/sri/nota-credito'
@@ -111,7 +111,8 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
     catch { return { error: 'No se pudo leer la firma electrónica. Revísala en Configuración.' } }
     let signedXml: string
     try {
-      signedXml = signInvoiceXml(xml, Buffer.from(p12), { pkcs12Password: descifrarSecreto(emisor.passwordFirma) })
+      // signCreditNoteXml firma apuntando al elemento <notaCredito> (no <factura>)
+      signedXml = signCreditNoteXml(xml, Buffer.from(p12), { pkcs12Password: descifrarSecreto(emisor.passwordFirma) })
     } catch (err: any) {
       await registrarLog('ERROR', 'VENTAS', `Error firmando NC: ${err.message || err}`, undefined, sesion.tenantId)
       return { error: 'Error al firmar la nota de crédito. Verifica la contraseña de la firma.' }
