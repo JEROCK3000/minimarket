@@ -5,6 +5,7 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { validarIdentificacion } from '@/lib/validators'
 import { descifrarSecreto } from '@/lib/security/crypto'
+import { consultarRucSRI } from '@/lib/sri/consulta-ruc'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
@@ -114,47 +115,46 @@ export async function consultarIdentificacionAction(identificacion: string) {
       }
     }
 
-    // 2) Token de EcuadorAPI (cifrado en Config del tenant)
+    const isRuc = clean.length === 13
+
+    // 2) RUC → API propia contra el SRI (gratis, oficial). No necesita token.
+    if (isRuc) {
+      const r = await consultarRucSRI(clean)
+      if (!r) return { error: `El RUC ${clean} no fue encontrado en el SRI.` }
+      return {
+        success: true, origen: 'SRI' as const,
+        nombre: r.nombre, direccion: r.direccion, email: '', telefono: '',
+      }
+    }
+
+    // 3) Cédula → EcuadorAPI (requiere token configurado)
     const tokenConf = await prisma.config.findFirst({
       where: { tenantId: sesion.tenantId, clave: 'ecuador_api_token' },
     })
     const token = tokenConf?.valor ? descifrarSecreto(tokenConf.valor) : ''
     if (!token) {
-      return { error: 'No se ha configurado el Token de EcuadorAPI en Configuración.' }
+      return { error: 'No se ha configurado el Token de EcuadorAPI (necesario para cédulas).' }
     }
 
-    // 3) Consulta externa
-    const isRuc = clean.length === 13
-    const url = isRuc
-      ? `https://api.ecuadorapi.com/api/v1/rucs/${clean}`
-      : `https://api.ecuadorapi.com/api/v1/cedulas/${clean}`
-    const res = await fetch(url, {
+    const res = await fetch(`https://api.ecuadorapi.com/api/v1/cedulas/${clean}`, {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       next: { revalidate: 0 },
     })
 
     if (!res.ok) {
-      if (res.status === 404) return { error: `La identificación ${clean} no fue encontrada.` }
+      if (res.status === 404) return { error: `La cédula ${clean} no fue encontrada.` }
       if (res.status === 401) return { error: 'El Token de EcuadorAPI no es válido o expiró.' }
       return { error: `El servicio externo respondió con un error (código ${res.status}).` }
     }
 
     const body = await res.json()
     const apiData = body.data || body
-    let nombre = ''
-    let direccion = ''
-    if (isRuc) {
-      nombre = apiData.business_name || apiData.trade_name || apiData.razonSocial || apiData.name || ''
-      direccion = apiData.address || apiData.direccionMatriz || apiData.direccion || ''
-    } else {
-      nombre = apiData.full_name || apiData.name || apiData.nombre || ''
-    }
-    if (!nombre) return { error: 'No se encontraron datos legibles para esta identificación.' }
+    const nombre = apiData.full_name || apiData.name || apiData.nombre || ''
+    if (!nombre) return { error: 'No se encontraron datos legibles para esta cédula.' }
 
     return {
       success: true, origen: 'API' as const,
-      nombre: nombre.trim().toUpperCase(), direccion: direccion.trim().toUpperCase(),
-      email: '', telefono: '',
+      nombre: nombre.trim().toUpperCase(), direccion: '', email: '', telefono: '',
     }
   } catch (error: any) {
     await registrarLog('ERROR', 'CLIENTES', `Error consultando identificación: ${error.message || error}`, undefined, sesion.tenantId)
