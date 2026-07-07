@@ -144,33 +144,38 @@ export async function registrarVentaAction(data: VentaFormValues) {
   }
 }
 
-// ─── Buscar/crear cliente rápido en el POS ────────────────────────────────────
+// ─── Buscar/crear/actualizar cliente rápido en el POS ─────────────────────────
 export async function buscarClienteAction(identificacion: string) {
   const sesion = await requerirTenant()
   const clean = identificacion.trim()
   if (!clean) return { error: 'Ingresa una identificación' }
   const cliente = await prisma.cliente.findFirst({
     where: { tenantId: sesion.tenantId, identificacion: clean },
-    select: { id: true, nombre: true, identificacion: true },
+    select: { id: true, nombre: true, identificacion: true, tipoIdentificacion: true, telefono: true, email: true, direccion: true },
   })
   if (!cliente) return { error: 'Cliente no encontrado' }
   return { success: true, cliente }
 }
 
-export async function crearClienteRapidoAction(data: {
-  identificacion: string; nombre: string; tipoIdentificacion: string; telefono?: string; email?: string
-}) {
+const clienteRapidoSchema = z.object({
+  identificacion: z.string().trim().min(3).max(15),
+  nombre: z.string().trim().min(1).max(200),
+  tipoIdentificacion: z.enum(['CEDULA', 'RUC', 'PASAPORTE', 'CONSUMIDOR_FINAL']),
+  telefono: z.string().trim().max(20).optional().or(z.literal('')),
+  email: z.string().trim().max(150).optional().or(z.literal('')),
+  direccion: z.string().trim().max(300).optional().or(z.literal('')),
+})
+export interface ClienteRapidoValues {
+  identificacion: string; nombre: string; tipoIdentificacion: string
+  telefono?: string; email?: string; direccion?: string
+}
+
+export async function crearClienteRapidoAction(data: ClienteRapidoValues) {
   const sesion = await requerirTenant()
-  const schema = z.object({
-    identificacion: z.string().trim().min(3).max(15),
-    nombre: z.string().trim().min(1).max(200),
-    tipoIdentificacion: z.enum(['CEDULA', 'RUC', 'PASAPORTE', 'CONSUMIDOR_FINAL']),
-    telefono: z.string().trim().max(20).optional().or(z.literal('')),
-    email: z.string().trim().max(150).optional().or(z.literal('')),
-  })
-  const parsed = schema.safeParse(data)
+  const parsed = clienteRapidoSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data
+  if (d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email)) return { error: 'Correo electrónico inválido' }
   try {
     const cliente = await prisma.cliente.create({
       data: {
@@ -180,12 +185,42 @@ export async function crearClienteRapidoAction(data: {
         tipoIdentificacion: d.tipoIdentificacion,
         telefono: d.telefono || null,
         email: d.email || null,
+        direccion: d.direccion || null,
       },
-      select: { id: true, nombre: true, identificacion: true },
+      select: { id: true, nombre: true, identificacion: true, telefono: true, email: true, direccion: true },
     })
     return { success: true, cliente }
   } catch (error: any) {
     if (error.code === 'P2002') return { error: 'Ya existe un cliente con esa identificación' }
     return { error: 'No se pudo crear el cliente' }
+  }
+}
+
+/** Actualiza los datos de un cliente existente desde el POS (corrección en caliente). */
+export async function actualizarClienteRapidoAction(id: string, data: ClienteRapidoValues) {
+  const sesion = await requerirTenant()
+  const parsed = clienteRapidoSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
+  const d = parsed.data
+  if (d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email)) return { error: 'Correo electrónico inválido' }
+  try {
+    const actual = await prisma.cliente.findFirst({ where: { id, tenantId: sesion.tenantId } })
+    if (!actual) return { error: 'Cliente no encontrado' }
+    const cliente = await prisma.cliente.update({
+      where: { id },
+      data: {
+        identificacion: d.identificacion,
+        nombre: d.nombre,
+        tipoIdentificacion: d.tipoIdentificacion,
+        telefono: d.telefono || null,
+        email: d.email || null,
+        direccion: d.direccion || null,
+      },
+      select: { id: true, nombre: true, identificacion: true, telefono: true, email: true, direccion: true },
+    })
+    return { success: true, cliente }
+  } catch (error: any) {
+    if (error.code === 'P2002') return { error: 'Ya existe un cliente con esa identificación' }
+    return { error: 'No se pudo actualizar el cliente' }
   }
 }

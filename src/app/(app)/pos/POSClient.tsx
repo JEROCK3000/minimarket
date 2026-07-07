@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef } from 'react'
 import { Search, ShoppingCart, Plus, Minus, Trash2, Receipt, FileText, Loader2, CheckCircle2, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { registrarVentaAction, buscarClienteAction, crearClienteRapidoAction } from './actions'
+import { registrarVentaAction, buscarClienteAction, crearClienteRapidoAction, actualizarClienteRapidoAction } from './actions'
 import { consultarIdentificacionAction } from '../clientes/actions'
 
 interface Prod {
@@ -12,7 +12,7 @@ interface Prod {
 }
 interface Cat { id: string; nombre: string; icono: string | null }
 interface ItemCarrito extends Prod { cantidad: number }
-interface ClienteSel { id: string; nombre: string; identificacion: string }
+interface ClienteSel { id: string; nombre: string; identificacion: string; telefono?: string | null; email?: string | null; direccion?: string | null }
 
 export function POSClient({ productos, categorias }: { productos: Prod[]; categorias: Cat[] }) {
   const [busqueda, setBusqueda] = useState('')
@@ -253,63 +253,132 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
   )
 }
 
-// ─── Modal: seleccionar/crear cliente ─────────────────────────────────────────
+// ─── Modal: seleccionar/crear/editar cliente ──────────────────────────────────
 function ClienteModal({ onClose, onSelect }: { onClose: () => void; onSelect: (c: ClienteSel) => void }) {
-  const [ident, setIdent] = useState('')
+  const [clienteId, setClienteId] = useState<string | null>(null) // null = nuevo
+  const [mostrarForm, setMostrarForm] = useState(false)
   const [buscando, setBuscando] = useState(false)
-  const [crear, setCrear] = useState(false)
-  const [nombre, setNombre] = useState('')
-  const [tipo, setTipo] = useState('CEDULA')
+  const [guardando, setGuardando] = useState(false)
+  const [f, setF] = useState({
+    tipoIdentificacion: 'CEDULA', identificacion: '', nombre: '',
+    telefono: '', email: '', direccion: '',
+  })
+  const set = (k: keyof typeof f, v: string) => setF((s) => ({ ...s, [k]: v }))
 
   const buscar = async () => {
+    if (!f.identificacion.trim()) { toast.error('Ingresa una identificación'); return }
     setBuscando(true)
     try {
-      // 1) Cliente ya registrado en el negocio → seleccionar directo
-      const local = await buscarClienteAction(ident)
-      if (local.success && local.cliente) { onSelect(local.cliente); return }
-
-      // 2) Consultar EcuadorAPI para autocompletar el nombre del cliente nuevo
-      const api = await consultarIdentificacionAction(ident)
+      // 1) Cliente ya registrado → cargar TODOS sus datos (editables)
+      const local = await buscarClienteAction(f.identificacion)
+      if (local.success && local.cliente) {
+        const c = local.cliente
+        setClienteId(c.id)
+        setF({
+          tipoIdentificacion: c.tipoIdentificacion, identificacion: c.identificacion, nombre: c.nombre,
+          telefono: c.telefono ?? '', email: c.email ?? '', direccion: c.direccion ?? '',
+        })
+        setMostrarForm(true)
+        toast.success('Cliente encontrado. Puedes corregir sus datos.')
+        return
+      }
+      // 2) Cliente nuevo → consultar EcuadorAPI para autocompletar
+      const api = await consultarIdentificacionAction(f.identificacion)
+      setClienteId(null)
       if (api.success && api.nombre) {
-        setNombre(api.nombre)
-        toast.success('Datos encontrados. Confirma para registrar.')
+        setF((s) => ({ ...s, nombre: api.nombre || '', direccion: api.direccion || s.direccion }))
+        toast.success('Datos encontrados. Completa y registra.')
       } else {
         toast.message('Cliente nuevo', { description: api.error || 'Completa los datos para registrarlo' })
       }
-      setCrear(true)
+      setMostrarForm(true)
     } finally { setBuscando(false) }
   }
-  const guardar = async () => {
-    const res = await crearClienteRapidoAction({ identificacion: ident, nombre, tipoIdentificacion: tipo })
-    if (res.success && res.cliente) { toast.success('Cliente registrado'); onSelect(res.cliente) }
-    else toast.error(res.error || 'No se pudo crear el cliente')
+
+  const guardarYUsar = async () => {
+    if (!f.nombre.trim()) { toast.error('El nombre es requerido'); return }
+    setGuardando(true)
+    try {
+      const payload = {
+        tipoIdentificacion: f.tipoIdentificacion, identificacion: f.identificacion, nombre: f.nombre,
+        telefono: f.telefono, email: f.email, direccion: f.direccion,
+      }
+      // Existente → actualizar (corrección en caliente). Nuevo → crear.
+      const res = clienteId
+        ? await actualizarClienteRapidoAction(clienteId, payload)
+        : await crearClienteRapidoAction(payload)
+      if (res.success && res.cliente) {
+        toast.success(clienteId ? 'Datos actualizados' : 'Cliente registrado')
+        onSelect(res.cliente)
+      } else {
+        toast.error(res.error || 'No se pudo guardar el cliente')
+      }
+    } finally { setGuardando(false) }
   }
+
+  const lbl = 'text-xs font-semibold text-gray-500 dark:text-gray-400'
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/50" onClick={onClose}>
-      <div className="w-full max-w-sm bg-white dark:bg-[#0f0f1e] rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/5">
+      <div className="w-full max-w-lg bg-white dark:bg-[#0f0f1e] rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/5 sticky top-0 bg-white dark:bg-[#0f0f1e]">
           <h2 className="font-bold text-gray-900 dark:text-white">Cliente para la factura</h2>
           <button onClick={onClose} className="p-1 text-gray-400"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-3">
-          <div className="flex gap-2">
-            <input value={ident} onChange={(e) => setIdent(e.target.value)} placeholder="Cédula o RUC" className="input" />
-            <button onClick={buscar} disabled={buscando || !ident} className="btn-ghost shrink-0">
-              {buscando ? <Loader2 size={15} className="animate-spin" /> : 'Buscar'}
-            </button>
-          </div>
-          {crear && (
-            <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-white/5">
-              <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="input">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className={lbl}>Tipo *</label>
+              <select value={f.tipoIdentificacion} onChange={(e) => set('tipoIdentificacion', e.target.value)} className="input">
                 <option value="CEDULA">Cédula</option>
                 <option value="RUC">RUC</option>
                 <option value="PASAPORTE">Pasaporte</option>
+                <option value="CONSUMIDOR_FINAL">Consumidor Final</option>
               </select>
-              <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre completo" className="input" />
-              <button onClick={guardar} disabled={!nombre} className="btn-primary w-full">Registrar y usar</button>
             </div>
+            <div className="space-y-1.5">
+              <label className={lbl}>Identificación *</label>
+              <div className="flex gap-1.5">
+                <input value={f.identificacion} onChange={(e) => set('identificacion', e.target.value)} className="input font-mono" placeholder="Cédula o RUC" />
+                <button onClick={buscar} disabled={buscando} className="btn-ghost shrink-0 px-2.5" title="Buscar / consultar">
+                  {buscando ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {mostrarForm && (
+            <>
+              {clienteId && (
+                <p className="text-[11px] text-brand-600 dark:text-brand-400 font-medium">
+                  Cliente existente — corrige lo que haga falta y se actualizará con la venta.
+                </p>
+              )}
+              <div className="space-y-1.5">
+                <label className={lbl}>Nombre / Razón social *</label>
+                <input value={f.nombre} onChange={(e) => set('nombre', e.target.value)} className="input" maxLength={200} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className={lbl}>Teléfono</label>
+                  <input value={f.telefono} onChange={(e) => set('telefono', e.target.value)} className="input" maxLength={20} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className={lbl}>Email</label>
+                  <input type="email" value={f.email} onChange={(e) => set('email', e.target.value)} className="input" maxLength={150} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className={lbl}>Dirección</label>
+                <input value={f.direccion} onChange={(e) => set('direccion', e.target.value)} className="input" maxLength={300} />
+              </div>
+              <button onClick={guardarYUsar} disabled={guardando || !f.nombre} className="btn-primary w-full">
+                {guardando ? <Loader2 size={16} className="animate-spin" /> : null}
+                {clienteId ? 'Actualizar y usar en la venta' : 'Registrar y usar en la venta'}
+              </button>
+            </>
           )}
+
           <button onClick={() => onSelect({ id: '', nombre: 'CONSUMIDOR FINAL', identificacion: '9999999999999' })} className="w-full text-xs text-gray-400 hover:text-gray-600 pt-1">
             O facturar como Consumidor Final
           </button>
