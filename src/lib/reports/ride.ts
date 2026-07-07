@@ -36,19 +36,18 @@ export function generarRidePDF(d: RideData): string {
   const headTop = 12
   const rightX = 118, rightW = M + W - rightX // recuadro derecho
 
-  // Recuadro derecho (datos tributarios)
+  // Recuadro derecho (datos tributarios) — el borde se dibuja al final con la altura real
   doc.setDrawColor(180); doc.setLineWidth(0.3)
-  const rightBottom = 62
-  doc.rect(rightX, headTop, rightW, rightBottom - headTop)
   let ry = headTop + 6
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(30)
   doc.text(`R.U.C.: ${d.emisor.ruc}`, rightX + 3, ry); ry += 6
   doc.setFontSize(11); doc.text('FACTURA', rightX + 3, ry); ry += 5
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
   doc.text(`No.: ${d.factura.numero}`, rightX + 3, ry); ry += 4.5
   doc.setFont('helvetica', 'bold'); doc.text('NÚMERO DE AUTORIZACIÓN:', rightX + 3, ry); ry += 3.5
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5)
-  doc.text(d.factura.numeroAutorizacion || 'N/A', rightX + 3, ry, { maxWidth: rightW - 6 }); ry += 4.5
+  const autLineas = doc.splitTextToSize(d.factura.numeroAutorizacion || 'N/A', rightW - 6)
+  doc.text(autLineas, rightX + 3, ry); ry += autLineas.length * 3 + 1.5
   doc.setFontSize(8)
   const fechaAuth = d.factura.fechaAutorizacion
     ? new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'America/Guayaquil' }).format(d.factura.fechaAutorizacion)
@@ -61,7 +60,11 @@ export function generarRidePDF(d: RideData): string {
   doc.setFont('helvetica', 'normal'); doc.text('NORMAL', rightX + 22, ry); ry += 5
   doc.setFont('helvetica', 'bold'); doc.text('CLAVE DE ACCESO:', rightX + 3, ry); ry += 3.5
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5)
-  doc.text(d.factura.claveAcceso, rightX + 3, ry, { maxWidth: rightW - 6 })
+  const claveLineas = doc.splitTextToSize(d.factura.claveAcceso, rightW - 6)
+  doc.text(claveLineas, rightX + 3, ry); ry += claveLineas.length * 3
+  // Borde del recuadro con la altura real del contenido + margen inferior
+  const rightBottom = ry + 3
+  doc.rect(rightX, headTop, rightW, rightBottom - headTop)
 
   // Bloque izquierdo: logo + datos del emisor
   let lx = M, logoW = 0
@@ -112,7 +115,7 @@ export function generarRidePDF(d: RideData): string {
   doc.text(dirLineas, M + 22, cy)
   doc.setFont('helvetica', 'bold'); doc.text('Correo: ', M + 120, cy)
   doc.setFont('helvetica', 'normal'); doc.text(d.cliente.email || '—', M + 133, cy, { maxWidth: W - 123 })
-  cy += Math.max(dirLineas.length * 4, 5)
+  cy += Math.max(dirLineas.length * 4, 5) + 2 // margen inferior
   // Dibujar el recuadro del cliente ahora que sé su alto
   doc.rect(M, cliBoxTop, W, cy - cliBoxTop)
 
