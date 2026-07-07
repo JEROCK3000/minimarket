@@ -1,0 +1,35 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# env files (NUNCA commitear — contienen secretos)
+.env*
+!.env.example
+
+# secrets y certificados
+*.p12
+*.key
+
+# logs
+/storage/logs/
+*.log
+
+# backups
+/storage/backups/
+*.sql
+*.sql.gz
+*.enc
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

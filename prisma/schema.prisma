@@ -1,0 +1,416 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// MiniMarket — Schema (multitenant, base MySQL/MariaDB)
+// Base del starter Solinteec + módulos de negocio del minimarket.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  NÚCLEO (heredado del starter): tenants, usuarios, roles, config, logs
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Tenant {
+  id        String   @id @default(cuid())
+  nombre    String   @db.VarChar(150) // nombre del minimarket
+  slug      String   @unique @db.VarChar(80)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuarios      Usuario[]
+  categorias    Categoria[]
+  productos     Producto[]
+  proveedores   Proveedor[]
+  clientes      Cliente[]
+  compras       Compra[]
+  ventas        Venta[]
+  gastos        Gasto[]
+  movimientos   MovimientoInventario[]
+
+  @@map("tenants")
+}
+
+model Usuario {
+  id        String   @id @default(cuid())
+  tenantId  String? // null solo para SUPERADMIN global
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  nombre    String   @db.VarChar(120)
+  email     String   @db.VarChar(180)
+  password  String   @db.VarChar(255) // solo hash bcrypt
+  rol       Rol      @default(USER)
+  activo    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ventas    Venta[] // ventas realizadas por este usuario (cajero)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("usuarios")
+}
+
+enum Rol {
+  SUPERADMIN // Solinteec: orquesta todos los minimarkets
+  ADMIN      // dueño del minimarket
+  USER       // cajero / empleado
+}
+
+model Config {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  clave     String   @db.VarChar(100)
+  valor     String   @db.Text // secretos van cifrados (lib/security/crypto)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, clave])
+  @@map("config")
+}
+
+model Log {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  nivel     NivelLog
+  modulo    String   @db.VarChar(60)
+  mensaje   String   @db.Text
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([nivel])
+  @@index([createdAt])
+  @@map("logs")
+}
+
+enum NivelLog {
+  INFO
+  WARN
+  ERROR
+  SECURITY
+  AUDIT
+  DEBUG
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  INVENTARIO: categorías y productos
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Categoria {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  nombre    String   @db.VarChar(100)
+  icono     String?  @db.VarChar(20)
+  color     String?  @db.VarChar(20)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productos Producto[]
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
+  @@map("categorias")
+}
+
+model Producto {
+  id            String     @id @default(cuid())
+  tenantId      String
+  tenant        Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoriaId   String?
+  categoria     Categoria? @relation(fields: [categoriaId], references: [id])
+
+  codigoBarras  String?    @db.VarChar(50) // para el lector del POS
+  nombre        String     @db.VarChar(150)
+  descripcion   String?    @db.Text
+
+  // Precios
+  precioCompra  Decimal    @default(0) @db.Decimal(10, 4)
+  precioVenta   Decimal    @default(0) @db.Decimal(10, 4)
+  ivaPorcentaje Decimal    @default(15) @db.Decimal(5, 2) // 15 (IVA) o 0 (exento)
+
+  // Inventario
+  stock         Decimal    @default(0) @db.Decimal(10, 3) // decimal: permite venta por peso
+  stockMinimo   Decimal    @default(0) @db.Decimal(10, 3) // para alertas de reposición
+  unidad        String     @default("unidad") @db.VarChar(20) // unidad, kg, lb, litro...
+  vendible      Boolean    @default(true)
+  activo        Boolean    @default(true)
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  compraItems   CompraItem[]
+  ventaItems    VentaItem[]
+  movimientos   MovimientoInventario[]
+
+  @@unique([tenantId, codigoBarras])
+  @@index([tenantId])
+  @@index([categoriaId])
+  @@map("productos")
+}
+
+// Kardex: cada entrada/salida de stock queda registrada para trazabilidad
+model MovimientoInventario {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productoId  String
+  producto    Producto @relation(fields: [productoId], references: [id])
+
+  tipo        TipoMovimiento
+  cantidad    Decimal  @db.Decimal(10, 3) // + entra, - sale
+  stockPrevio Decimal  @db.Decimal(10, 3)
+  stockNuevo  Decimal  @db.Decimal(10, 3)
+  motivo      String?  @db.VarChar(200) // "Compra #12", "Venta #340", "Ajuste manual"
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([productoId])
+  @@map("movimientos_inventario")
+}
+
+enum TipoMovimiento {
+  COMPRA
+  VENTA
+  AJUSTE
+  MERMA // producto dañado/vencido
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  COMPRAS (entrada de mercadería)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Proveedor {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  nombre         String   @db.VarChar(150)
+  identificacion String?  @db.VarChar(15) // RUC/cédula
+  telefono       String?  @db.VarChar(20)
+  email          String?  @db.VarChar(150)
+  direccion      String?  @db.VarChar(300)
+  activo         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  compras        Compra[]
+
+  @@index([tenantId])
+  @@map("proveedores")
+}
+
+model Compra {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  proveedorId String?
+  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id])
+
+  numero      String    @db.VarChar(30) // correlativo interno
+  numFactura  String?   @db.VarChar(40) // nº factura del proveedor
+  subtotal    Decimal   @default(0) @db.Decimal(12, 2)
+  iva         Decimal   @default(0) @db.Decimal(12, 2)
+  total       Decimal   @default(0) @db.Decimal(12, 2)
+  notas       String?   @db.Text
+  fecha       DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  items       CompraItem[]
+
+  @@index([tenantId])
+  @@map("compras")
+}
+
+model CompraItem {
+  id            String   @id @default(cuid())
+  compraId      String
+  compra        Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  productoId    String
+  producto      Producto @relation(fields: [productoId], references: [id])
+
+  cantidad      Decimal  @db.Decimal(10, 3)
+  precioUnitario Decimal @db.Decimal(10, 4)
+  subtotal      Decimal  @db.Decimal(12, 2)
+
+  @@index([compraId])
+  @@map("compra_items")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  VENTAS (POS) y clientes
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Cliente {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  tipoIdentificacion String   @default("CONSUMIDOR_FINAL") @db.VarChar(20) // CEDULA/RUC/PASAPORTE/CONSUMIDOR_FINAL
+  identificacion     String   @db.VarChar(15)
+  nombre             String   @db.VarChar(200)
+  telefono           String?  @db.VarChar(20)
+  email              String?  @db.VarChar(150)
+  direccion          String?  @db.VarChar(300)
+  activo             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  ventas             Venta[]
+
+  @@unique([tenantId, identificacion])
+  @@index([tenantId])
+  @@map("clientes")
+}
+
+model Venta {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clienteId   String?
+  cliente     Cliente?  @relation(fields: [clienteId], references: [id])
+  usuarioId   String? // cajero que hizo la venta
+  usuario     Usuario?  @relation(fields: [usuarioId], references: [id])
+
+  numero      String    @db.VarChar(30)
+  formaPago   String    @default("EFECTIVO") @db.VarChar(20) // EFECTIVO, TARJETA, TRANSFERENCIA
+  subtotal    Decimal   @default(0) @db.Decimal(12, 2)
+  descuento   Decimal   @default(0) @db.Decimal(12, 2)
+  iva         Decimal   @default(0) @db.Decimal(12, 2)
+  total       Decimal   @default(0) @db.Decimal(12, 2)
+  pagoCon     Decimal?  @db.Decimal(12, 2) // con cuánto pagó (para el vuelto)
+  requiereFactura Boolean @default(true) // true = factura electrónica; false = solo ticket
+  estado      EstadoVenta @default(COMPLETADA)
+  fecha       DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  items       VentaItem[]
+  factura     FacturaSRI?
+
+  @@index([tenantId])
+  @@index([clienteId])
+  @@map("ventas")
+}
+
+enum EstadoVenta {
+  COMPLETADA
+  ANULADA
+}
+
+model VentaItem {
+  id             String   @id @default(cuid())
+  ventaId        String
+  venta          Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  productoId     String
+  producto       Producto @relation(fields: [productoId], references: [id])
+
+  cantidad       Decimal  @db.Decimal(10, 3)
+  precioUnitario Decimal  @db.Decimal(10, 4)
+  subtotal       Decimal  @db.Decimal(12, 2)
+
+  @@index([ventaId])
+  @@map("venta_items")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GASTOS
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Gasto {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  categoria   String   @db.VarChar(60) // Arriendo, Servicios, Sueldos, Transporte...
+  descripcion String   @db.VarChar(300)
+  monto       Decimal  @db.Decimal(12, 2)
+  fecha       DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("gastos")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CIERRE DE CAJA
+// ═══════════════════════════════════════════════════════════════════════════
+
+model CierreCaja {
+  id               String   @id @default(cuid())
+  tenantId         String
+  usuarioId        String?
+  usuarioNombre    String?  @db.VarChar(120)
+
+  desde            DateTime // inicio del período del corte
+  hasta            DateTime // fin del período (momento del cierre)
+  totalVentas      Int      @default(0)
+  ventasEfectivo   Decimal  @default(0) @db.Decimal(12, 2)
+  ventasTarjeta    Decimal  @default(0) @db.Decimal(12, 2)
+  ventasTransfer   Decimal  @default(0) @db.Decimal(12, 2)
+  totalVendido     Decimal  @default(0) @db.Decimal(12, 2)
+  gastosEfectivo   Decimal  @default(0) @db.Decimal(12, 2)
+  efectivoEsperado Decimal  @default(0) @db.Decimal(12, 2) // efectivo ventas − gastos
+  efectivoContado  Decimal  @default(0) @db.Decimal(12, 2) // lo que contó físicamente
+  diferencia       Decimal  @default(0) @db.Decimal(12, 2) // contado − esperado
+  notas            String?  @db.Text
+  createdAt        DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("cierres_caja")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FACTURACIÓN ELECTRÓNICA SRI (a portar/adaptar desde GABLIMADOS)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model EmisorSRI {
+  id                    String   @id @default(cuid())
+  tenantId              String   @unique // un emisor por minimarket
+  ruc                   String   @db.VarChar(13)
+  razonSocial           String   @db.VarChar(300)
+  nombreComercial       String?  @db.VarChar(300)
+  dirMatriz             String   @db.VarChar(300)
+  dirEstablecimiento    String   @db.VarChar(300)
+  codigoEstablecimiento String   @default("001") @db.VarChar(3)
+  codigoPuntoEmision    String   @default("001") @db.VarChar(3)
+  obligadoContabilidad  Boolean  @default(false)
+  ambiente              Int      @default(1) // 1=pruebas, 2=producción
+  passwordFirma         String   @db.VarChar(500) // CIFRADO (lib/security/crypto)
+  rutaFirma             String   @db.VarChar(500)
+  contribuyenteEspecial String?  @db.VarChar(20)
+  agenteRetencion       String?  @db.VarChar(20)
+  secuencialFactura     Int      @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("emisor_sri")
+}
+
+model FacturaSRI {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  ventaId            String    @unique
+  venta              Venta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+
+  claveAcceso        String    @db.VarChar(49)
+  numeroAutorizacion String?   @db.VarChar(49)
+  estado             String    @default("PENDIENTE") @db.VarChar(20) // PENDIENTE/AUTORIZADA/RECHAZADA
+  xmlFirmado         String?   @db.LongText
+  mensajeError       String?   @db.Text
+  fechaAutorizacion  DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@map("facturas_sri")
+}
