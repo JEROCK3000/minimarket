@@ -5,8 +5,12 @@ import Link from 'next/link'
 import {
   DollarSign, ShoppingCart, Package, AlertTriangle, TrendingUp, Wallet, ArrowRight,
 } from 'lucide-react'
+import { DashboardCharts } from './DashboardCharts'
 
 export const metadata: Metadata = { title: 'Dashboard' }
+
+const NOMBRE_MES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+const NOMBRE_PAGO: Record<string, string> = { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia' }
 
 export default async function DashboardPage() {
   const sesion = await requerirTenant()
@@ -14,6 +18,7 @@ export default async function DashboardPage() {
 
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
   const inicioMes = new Date(); inicioMes.setDate(1); inicioMes.setHours(0, 0, 0, 0)
+  const inicioAnio = new Date(new Date().getFullYear(), 0, 1)
 
   const [ventasHoy, ventasMes, totalProductos, productosBajoStock, gastosMes, topProductos] = await Promise.all([
     prisma.venta.aggregate({ where: { tenantId: t, fecha: { gte: hoy }, estado: 'COMPLETADA' }, _sum: { total: true }, _count: true }),
@@ -34,6 +39,36 @@ export default async function DashboardPage() {
   ])
 
   const bajoStock = productosBajoStock.filter((p) => Number(p.stock) <= Number(p.stockMinimo))
+
+  // ─── Datos para las gráficas ──────────────────────────────────────────────
+  const [ventasAnio, gastosAnio, metodosPago] = await Promise.all([
+    prisma.venta.findMany({
+      where: { tenantId: t, estado: 'COMPLETADA', fecha: { gte: inicioAnio } },
+      select: { total: true, fecha: true },
+    }),
+    prisma.gasto.findMany({ where: { tenantId: t, fecha: { gte: inicioAnio } }, select: { monto: true, fecha: true } }),
+    prisma.venta.groupBy({
+      by: ['formaPago'],
+      where: { tenantId: t, estado: 'COMPLETADA', fecha: { gte: inicioMes } },
+      _sum: { total: true },
+    }),
+  ])
+
+  // Tendencia diaria (día del mes actual)
+  const diasEnMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+  const datosDiarios = Array.from({ length: diasEnMes }, (_, i) => ({ name: String(i + 1), Ventas: 0, Gastos: 0 }))
+  for (const v of ventasAnio) if (v.fecha >= inicioMes) datosDiarios[v.fecha.getDate() - 1].Ventas += Number(v.total)
+  for (const g of gastosAnio) if (g.fecha >= inicioMes) datosDiarios[g.fecha.getDate() - 1].Gastos += Number(g.monto)
+
+  // Tendencia mensual (meses del año actual)
+  const datosMensuales = NOMBRE_MES.map((name) => ({ name, Ventas: 0, Gastos: 0 }))
+  for (const v of ventasAnio) datosMensuales[v.fecha.getMonth()].Ventas += Number(v.total)
+  for (const g of gastosAnio) datosMensuales[g.fecha.getMonth()].Gastos += Number(g.monto)
+
+  // Métodos de pago (mes actual)
+  const datosMetodosPago = metodosPago
+    .map((m) => ({ name: NOMBRE_PAGO[m.formaPago] ?? m.formaPago, value: Number(m._sum.total ?? 0) }))
+    .filter((m) => m.value > 0)
 
   const topIds = topProductos.map((tp) => tp.productoId)
   const nombres = topIds.length
@@ -69,6 +104,9 @@ export default async function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Gráficas: tendencia ventas/gastos + métodos de pago */}
+      <DashboardCharts datosMensuales={datosMensuales} datosDiarios={datosDiarios} datosMetodosPago={datosMetodosPago} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
