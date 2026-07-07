@@ -11,7 +11,7 @@ export default async function VentasPage() {
   const ventas = await prisma.venta.findMany({
     where: { tenantId: sesion.tenantId },
     include: {
-      cliente: { select: { nombre: true, identificacion: true } },
+      cliente: { select: { nombre: true, identificacion: true, email: true } },
       factura: { select: { estado: true, numeroAutorizacion: true } },
       notaCredito: { select: { estado: true } },
       _count: { select: { items: true } },
@@ -24,6 +24,7 @@ export default async function VentasPage() {
     id: v.id,
     numero: v.numero,
     cliente: v.cliente?.nombre ?? 'Consumidor final',
+    clienteEmail: v.cliente?.email ?? '',
     items: v._count.items,
     total: Number(v.total),
     formaPago: v.formaPago,

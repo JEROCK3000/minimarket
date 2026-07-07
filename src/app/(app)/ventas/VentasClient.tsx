@@ -4,13 +4,13 @@ import { useState } from 'react'
 import { Receipt, FileText, Loader2, CheckCircle2, AlertCircle, Clock, Download, Mail, Eye, Ban, FileMinus } from 'lucide-react'
 import { toast } from 'sonner'
 import { emitirFacturaVentaAction } from './sri-actions'
-import { descargarRideAction, enviarFacturaEmailAction } from './factura-actions'
+import { descargarRideAction, enviarFacturaEmailAction, descargarRideNCAction, enviarNCEmailAction } from './factura-actions'
 import { anularVentaAction } from './actions'
 import { obtenerVistaPreviaFacturaAction } from './preview-actions'
 import { emitirNotaCreditoAction } from './nc-actions'
 
 interface VentaRow {
-  id: string; numero: string; cliente: string; items: number; total: number
+  id: string; numero: string; cliente: string; clienteEmail: string; items: number; total: number
   formaPago: string; requiereFactura: boolean; facturaEstado: string | null
   notaCreditoEstado: string | null; estado: string; fecha: string
 }
@@ -22,6 +22,9 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
   const [confirmarAnular, setConfirmarAnular] = useState<VentaRow | null>(null)
   const [notaCredito, setNotaCredito] = useState<VentaRow | null>(null)
   const [motivoNC, setMotivoNC] = useState('')
+  const [enviarModal, setEnviarModal] = useState<VentaRow | null>(null)
+  const [enviarTipo, setEnviarTipo] = useState<'factura' | 'nc'>('factura')
+  const [emailDestino, setEmailDestino] = useState('')
   const money = (n: number) => `$${n.toFixed(2)}`
   const fecha = (iso: string) => new Date(iso).toLocaleString('es-EC', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -58,15 +61,35 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
     } finally { setAccion(null) }
   }
 
-  const enviarEmail = async (id: string) => {
-    setAccion(id + '-mail')
-    const prom = enviarFacturaEmailAction(id)
-    toast.promise(prom.then((r) => { if (!r.success) throw new Error(r.error); return r }), {
-      loading: 'Enviando factura por correo...',
-      success: (r: any) => `Factura enviada a ${r.email}`,
-      error: (e) => e.message || 'No se pudo enviar',
-    })
-    try { await prom } catch {} finally { setAccion(null) }
+  const abrirEnviar = (v: VentaRow, tipo: 'factura' | 'nc') => { setEnviarModal(v); setEnviarTipo(tipo); setEmailDestino(v.clienteEmail || '') }
+
+  const enviarEmail = async () => {
+    if (!enviarModal) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailDestino.trim())) { toast.error('Ingresa un correo válido'); return }
+    setAccion(enviarModal.id + '-mail')
+    const t = toast.loading('Enviando por correo...')
+    try {
+      const r = enviarTipo === 'nc'
+        ? await enviarNCEmailAction(enviarModal.id, emailDestino.trim())
+        : await enviarFacturaEmailAction(enviarModal.id, emailDestino.trim())
+      if (r.success) { toast.success(`Enviado a ${r.email}`, { id: t }); setEnviarModal(null) }
+      else toast.error(r.error || 'No se pudo enviar', { id: t })
+    } finally { setAccion(null) }
+  }
+
+  const descargarNCPDF = async (id: string) => {
+    setAccion(id + '-ncpdf')
+    try {
+      const res = await descargarRideNCAction(id)
+      if (res.success && res.pdfBase64) {
+        const bin = atob(res.pdfBase64)
+        const bytes = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+        const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+        const a = document.createElement('a'); a.href = url; a.download = `NotaCredito-${res.numeroNC}.pdf`; a.click()
+        URL.revokeObjectURL(url)
+      } else toast.error(res.error || 'No se pudo generar el PDF')
+    } finally { setAccion(null) }
   }
 
   const verPrevia = async (id: string) => {
@@ -179,7 +202,7 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                               <button onClick={() => descargarPDF(v.id)} disabled={accion === v.id + '-pdf'} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition" title="Descargar PDF (RIDE)">
                                 {accion === v.id + '-pdf' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
                               </button>
-                              <button onClick={() => enviarEmail(v.id)} disabled={accion === v.id + '-mail'} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition" title="Enviar por correo">
+                              <button onClick={() => abrirEnviar(v, 'factura')} disabled={accion === v.id + '-mail'} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition" title="Enviar / reenviar factura por correo">
                                 {accion === v.id + '-mail' ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
                               </button>
                               {puedeAnular && v.notaCreditoEstado !== 'AUTORIZADA' && (
@@ -187,6 +210,16 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                                   <FileMinus size={15} />
                                 </button>
                               )}
+                            </>
+                          )}
+                          {v.notaCreditoEstado === 'AUTORIZADA' && (
+                            <>
+                              <button onClick={() => descargarNCPDF(v.id)} disabled={accion === v.id + '-ncpdf'} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-red-400 hover:text-red-600 transition" title="Descargar nota de crédito (PDF)">
+                                {accion === v.id + '-ncpdf' ? <Loader2 size={15} className="animate-spin" /> : <FileMinus size={15} />}
+                              </button>
+                              <button onClick={() => abrirEnviar(v, 'nc')} disabled={accion === v.id + '-mail'} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-red-400 hover:text-red-600 transition" title="Enviar nota de crédito por correo">
+                                {accion === v.id + '-mail' ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
+                              </button>
                             </>
                           )}
                           {puedeAnularEsta && (
@@ -240,6 +273,33 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                 <div className="flex justify-between font-black text-gray-900 dark:text-white text-sm"><span>Total</span><span>${preview.totales.total.toFixed(2)}</span></div>
               </div>
               <p className="text-[11px] text-gray-400 pt-1">Esta es una proyección. El número definitivo se asigna al emitir al SRI.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal enviar/reenviar factura por correo */}
+      {enviarModal && (
+        <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/50" onClick={() => setEnviarModal(null)}>
+          <div className="w-full max-w-sm bg-white dark:bg-[#0f0f1e] rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-white/5">
+              <Mail size={18} className="text-brand-600" />
+              <h2 className="font-bold text-gray-900 dark:text-white">Enviar {enviarTipo === 'nc' ? 'nota de crédito' : 'factura'} — {enviarModal.numero}</h2>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Correo de destino</label>
+                <input type="email" value={emailDestino} onChange={(e) => setEmailDestino(e.target.value)} className="input" placeholder="correo@ejemplo.com" autoFocus />
+                <p className="text-[11px] text-gray-400">
+                  {enviarModal.clienteEmail ? `Correo del cliente precargado. Puedes cambiarlo para reenviar a otro.` : 'El cliente no tiene correo; escribe uno.'}
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setEnviarModal(null)} className="btn-ghost">Cancelar</button>
+                <button onClick={enviarEmail} disabled={accion === enviarModal.id + '-mail'} className="btn-primary">
+                  {accion === enviarModal.id + '-mail' ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />} Enviar
+                </button>
+              </div>
             </div>
           </div>
         </div>

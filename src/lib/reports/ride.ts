@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
 export interface RideData {
+  tipoDocumento?: 'FACTURA' | 'NOTA_CREDITO' // por defecto FACTURA
   emisor: {
     razonSocial: string; nombreComercial?: string | null; ruc: string
     dirMatriz: string; dirEstablecimiento: string; obligadoContabilidad: boolean; ambiente: number
@@ -10,6 +11,8 @@ export interface RideData {
     numero: string; claveAcceso: string; numeroAutorizacion?: string | null
     fechaAutorizacion?: Date | null; fechaEmision: string; formaPago: string
   }
+  // Solo para notas de crédito: comprobante que modifica y motivo
+  notaCredito?: { docModificadoNumero: string; motivo: string } | null
   cliente: { nombre: string; identificacion: string; direccion?: string | null; email?: string | null }
   items: { codigo: string; descripcion: string; cantidad: number; precioUnitario: number; descuento: number; subtotal: number }[]
   totales: { subtotal15: number; subtotal0: number; subtotalSinImpuestos: number; descuento: number; iva: number; total: number }
@@ -41,7 +44,8 @@ export function generarRidePDF(d: RideData): string {
   let ry = headTop + 6
   doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(30)
   doc.text(`R.U.C.: ${d.emisor.ruc}`, rightX + 3, ry); ry += 6
-  doc.setFontSize(11); doc.text('FACTURA', rightX + 3, ry); ry += 5
+  doc.setFontSize(11)
+  doc.text(d.tipoDocumento === 'NOTA_CREDITO' ? 'NOTA DE CRÉDITO' : 'FACTURA', rightX + 3, ry); ry += 5
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
   doc.text(`No.: ${d.factura.numero}`, rightX + 3, ry); ry += 4.5
   doc.setFont('helvetica', 'bold'); doc.text('NÚMERO DE AUTORIZACIÓN:', rightX + 3, ry); ry += 3.5
@@ -118,6 +122,21 @@ export function generarRidePDF(d: RideData): string {
   cy += Math.max(dirLineas.length * 4, 5) + 2 // margen inferior
   // Dibujar el recuadro del cliente ahora que sé su alto
   doc.rect(M, cliBoxTop, W, cy - cliBoxTop)
+
+  // ═══ Bloque de nota de crédito (comprobante que modifica + motivo) ════════
+  if (d.tipoDocumento === 'NOTA_CREDITO' && d.notaCredito) {
+    cy += 3
+    const ncTop = cy
+    cy += 5
+    doc.setFontSize(8.5); doc.setTextColor(30)
+    doc.setFont('helvetica', 'bold'); doc.text('Comprobante que se modifica: ', M + 2, cy)
+    doc.setFont('helvetica', 'normal'); doc.text(`FACTURA  ${d.notaCredito.docModificadoNumero}`, M + 52, cy); cy += 5
+    doc.setFont('helvetica', 'bold'); doc.text('Motivo: ', M + 2, cy)
+    doc.setFont('helvetica', 'normal')
+    const motLineas = doc.splitTextToSize(d.notaCredito.motivo, W - 24)
+    doc.text(motLineas, M + 18, cy); cy += Math.max(motLineas.length * 4, 5) + 2
+    doc.rect(M, ncTop, W, cy - ncTop)
+  }
 
   // ═══ TABLA DE ITEMS ═══════════════════════════════════════════════════════
   autoTable(doc, {
