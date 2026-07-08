@@ -80,8 +80,17 @@ export async function guardarEmisorSRIAction(formData: FormData) {
     secuencialFactura: parseInt(g('secuencialFactura'), 10) || 1,
   }
 
-  // Token de EcuadorAPI (cifrado; el centinela conserva el existente)
+  // Token de EcuadorAPI y API key de RUC (cifrados; el centinela conserva el existente)
   const ecuadorApiToken = g('ecuadorApiToken')
+  const rucApiKey = g('rucApiKey')
+
+  const guardarSecretoConfig = async (clave: string, valor: string) => {
+    if (!valor || valor === SECRETO_MASCARA) return
+    const cifrado = cifrarSecreto(valor.trim())
+    const existe = await prisma.config.findFirst({ where: { tenantId: sesion.tenantId, clave } })
+    if (existe) await prisma.config.update({ where: { id: existe.id }, data: { valor: cifrado } })
+    else await prisma.config.create({ data: { tenantId: sesion.tenantId, clave, valor: cifrado } })
+  }
 
   try {
     if (actual) {
@@ -90,15 +99,8 @@ export async function guardarEmisorSRIAction(formData: FormData) {
       await prisma.emisorSRI.create({ data: { ...datos, tenantId: sesion.tenantId } })
     }
 
-    if (ecuadorApiToken && ecuadorApiToken !== SECRETO_MASCARA) {
-      const cifrado = cifrarSecreto(ecuadorApiToken.trim())
-      const existe = await prisma.config.findFirst({ where: { tenantId: sesion.tenantId, clave: 'ecuador_api_token' } })
-      if (existe) {
-        await prisma.config.update({ where: { id: existe.id }, data: { valor: cifrado } })
-      } else {
-        await prisma.config.create({ data: { tenantId: sesion.tenantId, clave: 'ecuador_api_token', valor: cifrado } })
-      }
-    }
+    await guardarSecretoConfig('ecuador_api_token', ecuadorApiToken)
+    await guardarSecretoConfig('ruc_api_key', rucApiKey)
 
     await registrarLog('AUDIT', 'CONFIG', `Emisor SRI guardado por ${sesion.email}`, undefined, sesion.tenantId)
     revalidatePath('/configuracion')

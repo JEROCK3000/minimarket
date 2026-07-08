@@ -117,9 +117,13 @@ export async function consultarIdentificacionAction(identificacion: string) {
 
     const isRuc = clean.length === 13
 
-    // 2) RUC → API propia contra el SRI (gratis, oficial). No necesita token.
+    // 2) RUC → API propia de Solinteec (apiruc.solinteec.com). Key desde Configuración (BD) o .env.
     if (isRuc) {
-      const r = await consultarRucSRI(clean)
+      const rucKeyConf = await prisma.config.findFirst({
+        where: { tenantId: sesion.tenantId, clave: 'ruc_api_key' },
+      })
+      const rucKey = rucKeyConf?.valor ? descifrarSecreto(rucKeyConf.valor) : undefined
+      const r = await consultarRucSRI(clean, rucKey)
       if (!r) return { error: `El RUC ${clean} no fue encontrado en el SRI.` }
       return {
         success: true, origen: 'SRI' as const,

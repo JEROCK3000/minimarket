@@ -14,7 +14,7 @@ interface Config {
   contribuyenteEspecial: string; agenteRetencion: string; secuencialFactura: number
 }
 
-export function EmisorSRIForm({ config, ecuadorApiToken }: { config: Config | null; ecuadorApiToken: string }) {
+export function EmisorSRIForm({ config, ecuadorApiToken, rucApiKey }: { config: Config | null; ecuadorApiToken: string; rucApiKey: string }) {
   const [loading, setLoading] = useState(false)
   const [firmaNombre, setFirmaNombre] = useState('')
   const [logoNombre, setLogoNombre] = useState('')
@@ -98,16 +98,24 @@ export function EmisorSRIForm({ config, ecuadorApiToken }: { config: Config | nu
 
       <div className="card space-y-4">
         <h3 className="font-bold text-gray-900 dark:text-white text-sm border-b border-gray-100 dark:border-white/5 pb-2 flex items-center gap-2">
-          <Search size={16} className="text-brand-600" /> Consulta automática de cédulas/RUC (EcuadorAPI)
+          <Search size={16} className="text-brand-600" /> Consulta automática de identificaciones
         </h3>
+
+        <div className={field}>
+          <label className={lbl}>API Key de consulta de RUC (Solinteec) {rucApiKey && <span className="text-gray-400">(se conserva si no la cambias)</span>}</label>
+          <input name="rucApiKey" type="password" defaultValue={rucApiKey} className="input" placeholder="Pega aquí la API key de apiruc.solinteec.com" />
+          <p className="text-[11px] text-gray-400">
+            Para consultar <strong>RUC</strong> (13 dígitos). Genérala en el panel de <span className="font-mono">apiruc.solinteec.com</span>. Se guarda cifrada (AES-256).
+          </p>
+        </div>
+
         <div className={field}>
           <label className={lbl}>Token de EcuadorAPI {ecuadorApiToken && <span className="text-gray-400">(se conserva si no lo cambias)</span>}</label>
           <input name="ecuadorApiToken" type="password" defaultValue={ecuadorApiToken} className="input" placeholder="Pega aquí tu token de api.ecuadorapi.com" />
+          <p className="text-[11px] text-gray-400">
+            Para consultar <strong>cédulas</strong> (10 dígitos). Consíguelo en <span className="font-mono">api.ecuadorapi.com</span>. Se guarda cifrado (AES-256).
+          </p>
         </div>
-        <p className="text-[11px] text-gray-400">
-          Con este token, al escribir una cédula o RUC en el POS o en Clientes se autocompletan el nombre y la dirección.
-          Se guarda cifrado (AES-256). Consíguelo en <span className="font-mono">api.ecuadorapi.com</span>.
-        </p>
       </div>
 
       <div className="flex justify-end">

@@ -14,13 +14,14 @@ export interface ConsultaRucResultado {
   estado: string
 }
 
-export async function consultarRucSRI(ruc: string): Promise<ConsultaRucResultado | null> {
+export async function consultarRucSRI(ruc: string, keyOverride?: string): Promise<ConsultaRucResultado | null> {
   const clean = ruc.trim()
   if (!/^\d{13}$/.test(clean)) return null
 
-  const base = process.env.RUC_API_URL
-  const key = process.env.RUC_API_KEY
-  if (!base) throw new Error('RUC_API_URL no está configurada')
+  // URL fija de infraestructura; la key puede venir de Configuración (BD) o del .env
+  const base = process.env.RUC_API_URL || 'https://apiruc.solinteec.com'
+  const key = keyOverride || process.env.RUC_API_KEY
+  if (!key) throw new Error('No se ha configurado la API Key de consulta de RUC')
 
   const res = await fetch(`${base}/ruc/${clean}`, {
     headers: key ? { Authorization: `Bearer ${key}` } : {},

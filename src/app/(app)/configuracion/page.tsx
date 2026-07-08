@@ -12,6 +12,8 @@ export default async function ConfiguracionPage() {
   const emisor = await prisma.emisorSRI.findUnique({ where: { tenantId: sesion.tenantId } })
   const tokenConf = await prisma.config.findFirst({ where: { tenantId: sesion.tenantId, clave: 'ecuador_api_token' } })
   const tieneToken = !!tokenConf?.valor
+  const rucKeyConf = await prisma.config.findFirst({ where: { tenantId: sesion.tenantId, clave: 'ruc_api_key' } })
+  const tieneRucKey = !!rucKeyConf?.valor
 
   const config = emisor
     ? {
@@ -40,7 +42,7 @@ export default async function ConfiguracionPage() {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Datos del emisor para facturación electrónica (SRI)</p>
       </div>
       <ConfigTabs />
-      <EmisorSRIForm config={config} ecuadorApiToken={tieneToken ? SECRETO_MASCARA : ''} />
+      <EmisorSRIForm config={config} ecuadorApiToken={tieneToken ? SECRETO_MASCARA : ''} rucApiKey={tieneRucKey ? SECRETO_MASCARA : ''} />
     </div>
   )
 }
