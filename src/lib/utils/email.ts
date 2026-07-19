@@ -4,7 +4,7 @@ import { registrarLog } from '@/lib/logs/logger'
 import { descifrarSecreto } from '@/lib/security/crypto'
 
 /** Lee la configuración SMTP (del tenant) y construye un transporter de nodemailer. */
-async function obtenerTransporter(tenantId: string) {
+async function obtenerTransporter(tenantId: string | null) {
   const configs = await prisma.config.findMany({
     where: {
       tenantId,
@@ -70,6 +70,38 @@ export async function enviarFacturaPorEmail(
     ],
   })
   await registrarLog('AUDIT', 'EMAIL', `Factura ${numeroFactura} enviada a ${destinatario}`, undefined, tenantId)
+}
+
+/** Envía el enlace de restablecimiento de contraseña. El token viaja solo en este correo. */
+export async function enviarCorreoRecuperacion(
+  tenantId: string | null,
+  destinatario: string,
+  nombre: string,
+  enlace: string,
+  minutosValidez: number
+) {
+  const { transporter, from } = await obtenerTransporter(tenantId)
+  await transporter.sendMail({
+    from,
+    to: destinatario,
+    subject: 'Restablecer tu contraseña',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 14px; color: #1f2937;">
+        <h1 style="color: #2563eb; margin: 0 0 4px; font-size: 20px;">Restablecer contraseña</h1>
+        <p style="font-size: 14px; line-height: 1.6;">Hola ${nombre}, recibimos una solicitud para restablecer tu contraseña.</p>
+        <p style="text-align:center;margin:24px 0;">
+          <a href="${enlace}" style="background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:bold;display:inline-block;">
+            Crear nueva contraseña
+          </a>
+        </p>
+        <p style="font-size:12px;color:#6b7280;line-height:1.6;">
+          El enlace es válido por ${minutosValidez} minutos y solo puede usarse una vez.
+          Si no solicitaste este cambio, ignora este correo: tu contraseña actual seguirá funcionando.
+        </p>
+        <p style="font-size:11px;color:#9ca3af;word-break:break-all;">Si el botón no funciona, copia y pega este enlace: ${enlace}</p>
+      </div>`,
+  })
+  await registrarLog('AUDIT', 'AUTH', `Correo de recuperación de contraseña enviado a ${destinatario}`, undefined, tenantId ?? undefined)
 }
 
 /** Envía un correo simple de prueba (verificación de la configuración SMTP). */

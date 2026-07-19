@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useActionState } from 'react'
 import { loginAction } from '@/lib/auth/actions'
 import { LogIn, Loader2 } from 'lucide-react'
@@ -31,6 +32,12 @@ export function LoginForm() {
         {pending ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
         Iniciar sesión
       </button>
+
+      <p className="text-center">
+        <Link href="/recuperar" className="text-xs text-gray-500 hover:text-brand-600 dark:hover:text-brand-400 font-medium">
+          ¿Olvidaste tu contraseña?
+        </Link>
+      </p>
     </form>
   )
 }

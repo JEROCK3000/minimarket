@@ -1,11 +1,12 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requerirTenant } from '@/lib/auth/tenant'
 import { prisma } from '@/lib/db/prisma'
 import { registrarLog } from '@/lib/logs/logger'
 import ExcelJS from 'exceljs'
+import { generarReportePdf, usd } from '@/lib/reports/pdf-reporte'
 
-// GET /api/reportes/inventario — stock actual y valorización
-export async function GET() {
+// GET /api/reportes/inventario?formato=excel|pdf — stock actual y valorización
+export async function GET(request: NextRequest) {
   let sesion
   try {
     sesion = await requerirTenant()
@@ -20,6 +21,41 @@ export async function GET() {
       orderBy: [{ categoria: { nombre: 'asc' } }, { nombre: 'asc' }],
     })
     const tenant = await prisma.tenant.findUnique({ where: { id: sesion.tenantId }, select: { nombre: true } })
+
+    if (new URL(request.url).searchParams.get('formato') === 'pdf') {
+      let valorTotal = 0
+      const filas = productos.map((p) => {
+        const stock = Number(p.stock)
+        const valor = stock * Number(p.precioCompra)
+        valorTotal += valor
+        return [
+          p.nombre, p.categoria?.nombre ?? '—', p.codigoBarras ?? '—',
+          stock, Number(p.stockMinimo),
+          usd(Number(p.precioCompra)), usd(Number(p.precioVenta)), usd(valor),
+        ]
+      })
+      const pdf = generarReportePdf({
+        empresa: tenant?.nombre || 'MiniMarket',
+        titulo: 'Inventario y Valorización',
+        subtitulo: `Al ${new Date().toLocaleDateString('es-EC')} | ${productos.length} producto(s)`,
+        orientacion: 'landscape',
+        columnas: [
+          { header: 'Producto' }, { header: 'Categoría' }, { header: 'Código', align: 'center' },
+          { header: 'Stock', align: 'right' }, { header: 'Stock mín.', align: 'right' },
+          { header: 'P. Compra', align: 'right' }, { header: 'P. Venta', align: 'right' },
+          { header: 'Valor stock (costo)', align: 'right' },
+        ],
+        filas,
+        totales: ['', '', '', '', '', '', 'TOTAL', usd(valorTotal)],
+      })
+      await registrarLog('AUDIT', 'REPORTES', `Reporte de inventario PDF generado por ${sesion.email}`, undefined, sesion.tenantId)
+      return new NextResponse(pdf, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="inventario_${new Date().toISOString().slice(0, 10)}.pdf"`,
+        },
+      })
+    }
 
     const wb = new ExcelJS.Workbook()
     wb.creator = tenant?.nombre || 'MiniMarket'

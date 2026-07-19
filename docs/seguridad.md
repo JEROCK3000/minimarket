@@ -17,6 +17,8 @@ Controles de seguridad implementados en la plantilla. Las reglas obligatorias co
 | Headers de seguridad | `next.config.ts` | X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy, HSTS |
 | Cookies seguras | `lib/auth/actions.ts` | httpOnly, secure en prod, sameSite lax, expiración 7 días |
 | Errores genéricos | convención | Detalle solo en `registrarLog`, no al cliente |
+| Recuperación de contraseña | `lib/auth/recuperacion-actions.ts` | Token `crypto.randomBytes` de un solo uso, solo hash SHA-256 en BD, 30 min de validez, respuesta genérica, rate limiting por email |
+| Cambio de email/contraseña | `configuracion/seguridad/actions.ts` | Exige la contraseña actual; el cambio de email verifica unicidad y reemite el JWT |
 
 ## Variables de entorno de seguridad
 

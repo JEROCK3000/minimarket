@@ -3,8 +3,9 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { prisma } from '@/lib/db/prisma'
 import { registrarLog } from '@/lib/logs/logger'
 import ExcelJS from 'exceljs'
+import { generarReportePdf, usd } from '@/lib/reports/pdf-reporte'
 
-// GET /api/reportes/ventas?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+// GET /api/reportes/ventas?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&formato=excel|pdf
 export async function GET(request: NextRequest) {
   let sesion
   try {
@@ -25,6 +26,45 @@ export async function GET(request: NextRequest) {
     })
 
     const tenant = await prisma.tenant.findUnique({ where: { id: sesion.tenantId }, select: { nombre: true } })
+
+    if (searchParams.get('formato') === 'pdf') {
+      let totalGeneral = 0
+      const filas = ventas.map((v) => {
+        totalGeneral += Number(v.total)
+        return [
+          v.numero,
+          v.fecha.toLocaleDateString('es-EC'),
+          v.cliente?.nombre ?? 'Consumidor final',
+          v.cliente?.identificacion ?? '—',
+          v.formaPago,
+          !v.requiereFactura ? 'Ticket' : v.factura?.estado ?? 'Sin emitir',
+          usd(Number(v.subtotal)),
+          usd(Number(v.iva)),
+          usd(Number(v.total)),
+        ]
+      })
+      const pdf = generarReportePdf({
+        empresa: tenant?.nombre || 'MiniMarket',
+        titulo: 'Reporte de Ventas',
+        subtitulo: `Del ${desde.toLocaleDateString('es-EC')} al ${hasta.toLocaleDateString('es-EC')} | ${ventas.length} venta(s)`,
+        orientacion: 'landscape',
+        columnas: [
+          { header: 'Nº' }, { header: 'Fecha', align: 'center' }, { header: 'Cliente' },
+          { header: 'Identificación', align: 'center' }, { header: 'Forma pago', align: 'center' },
+          { header: 'Comprobante', align: 'center' }, { header: 'Subtotal', align: 'right' },
+          { header: 'IVA', align: 'right' }, { header: 'Total', align: 'right' },
+        ],
+        filas,
+        totales: ['', '', '', '', '', 'TOTAL', '', '', usd(totalGeneral)],
+      })
+      await registrarLog('AUDIT', 'REPORTES', `Reporte de ventas PDF generado por ${sesion.email}`, undefined, sesion.tenantId)
+      return new NextResponse(pdf, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="ventas_${desde.toISOString().slice(0, 10)}_${hasta.toISOString().slice(0, 10)}.pdf"`,
+        },
+      })
+    }
 
     const wb = new ExcelJS.Workbook()
     wb.creator = tenant?.nombre || 'MiniMarket'

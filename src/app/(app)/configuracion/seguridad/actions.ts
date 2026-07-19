@@ -2,8 +2,11 @@
 
 import { prisma } from '@/lib/db/prisma'
 import { requerirSesion } from '@/lib/auth/session'
+import { crearToken, COOKIE_SESION } from '@/lib/auth/jwt'
 import { registrarLog } from '@/lib/logs/logger'
+import { cookies } from 'next/headers'
 import bcrypt from 'bcryptjs'
+import { z } from 'zod'
 
 const LONGITUD_MINIMA = 10
 
@@ -43,5 +46,60 @@ export async function cambiarPasswordAction(data: {
   } catch (error: any) {
     await registrarLog('ERROR', 'AUTH', `Error cambiando contraseña: ${error.message || error}`, undefined, sesion.tenantId)
     return { error: 'No se pudo cambiar la contraseña' }
+  }
+}
+
+export async function cambiarEmailAction(data: { password: string; emailNuevo: string }) {
+  const sesion = await requerirSesion()
+
+  const parsed = z
+    .object({ password: z.string().min(1).max(200), emailNuevo: z.string().email().max(180) })
+    .safeParse(data)
+  if (!parsed.success) return { error: 'Ingresa tu contraseña y un correo válido' }
+
+  const emailNuevo = parsed.data.emailNuevo.toLowerCase().trim()
+
+  try {
+    const usuario = await prisma.usuario.findUnique({ where: { id: sesion.sub } })
+    if (!usuario) return { error: 'Usuario no encontrado' }
+
+    if (emailNuevo === usuario.email) {
+      return { error: 'El nuevo correo es igual al actual' }
+    }
+
+    const ok = await bcrypt.compare(parsed.data.password, usuario.password)
+    if (!ok) {
+      await registrarLog('SECURITY', 'AUTH', `Cambio de email con contraseña incorrecta: ${sesion.email}`, undefined, sesion.tenantId)
+      return { error: 'La contraseña es incorrecta' }
+    }
+
+    // El login busca por email sin filtrar tenant: exigir unicidad global
+    const existente = await prisma.usuario.findFirst({ where: { email: emailNuevo, id: { not: usuario.id } } })
+    if (existente) return { error: 'Ese correo ya está en uso por otra cuenta' }
+
+    await prisma.usuario.update({ where: { id: usuario.id }, data: { email: emailNuevo } })
+
+    // Reemitir la sesión para que el JWT lleve el nuevo email
+    const token = await crearToken({
+      sub: usuario.id,
+      tenantId: usuario.tenantId,
+      nombre: usuario.nombre,
+      email: emailNuevo,
+      rol: usuario.rol,
+    })
+    const cookieStore = await cookies()
+    cookieStore.set(COOKIE_SESION, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    })
+
+    await registrarLog('AUDIT', 'AUTH', `Email de cuenta cambiado: ${usuario.email} → ${emailNuevo}`, undefined, sesion.tenantId)
+    return { success: true }
+  } catch (error: any) {
+    await registrarLog('ERROR', 'AUTH', `Error cambiando email: ${error.message || error}`, undefined, sesion.tenantId)
+    return { error: 'No se pudo cambiar el correo' }
   }
 }

@@ -1,8 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { FileSpreadsheet, Download, Loader2, Package, Wallet } from 'lucide-react'
+import { FileSpreadsheet, FileText, Download, Loader2, Package, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
+
+type Tipo = 'ventas' | 'gastos' | 'inventario'
+type Formato = 'excel' | 'pdf'
 
 export function ReportesClient() {
   const primerDia = new Date(new Date().setDate(1)).toISOString().slice(0, 10)
@@ -11,17 +14,20 @@ export function ReportesClient() {
   const [hasta, setHasta] = useState(hoy)
   const [cargando, setCargando] = useState<string | null>(null)
 
-  const descargar = async (tipo: 'ventas' | 'gastos' | 'inventario', nombre: string) => {
-    setCargando(tipo)
+  const descargar = async (tipo: Tipo, formato: Formato) => {
+    setCargando(`${tipo}-${formato}`)
     try {
-      const rango = tipo === 'inventario' ? '' : `?desde=${desde}&hasta=${hasta}`
-      const res = await fetch(`/api/reportes/${tipo}${rango}`)
+      const params = new URLSearchParams()
+      if (tipo !== 'inventario') { params.set('desde', desde); params.set('hasta', hasta) }
+      if (formato === 'pdf') params.set('formato', 'pdf')
+      const qs = params.toString()
+      const res = await fetch(`/api/reportes/${tipo}${qs ? `?${qs}` : ''}`)
       if (!res.ok) throw new Error('No se pudo generar el reporte')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${nombre}.xlsx`
+      a.download = `${tipo}.${formato === 'pdf' ? 'pdf' : 'xlsx'}`
       a.click()
       URL.revokeObjectURL(url)
       toast.success('Reporte descargado')
@@ -60,10 +66,16 @@ export function ReportesClient() {
             <div className={`w-10 h-10 rounded-xl grid place-items-center mb-3 ${r.color}`}><r.icon size={20} /></div>
             <h3 className="font-bold text-gray-900 dark:text-white text-sm">{r.titulo}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex-1">{r.desc}</p>
-            <button onClick={() => descargar(r.tipo, r.tipo)} disabled={cargando === r.tipo} className="btn-primary w-full mt-4 h-9 text-xs">
-              {cargando === r.tipo ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-              Descargar Excel
-            </button>
+            <div className="grid grid-cols-2 gap-2 mt-4">
+              <button onClick={() => descargar(r.tipo, 'excel')} disabled={cargando !== null} className="btn-primary h-9 text-xs">
+                {cargando === `${r.tipo}-excel` ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                Excel
+              </button>
+              <button onClick={() => descargar(r.tipo, 'pdf')} disabled={cargando !== null} className="btn-ghost h-9 text-xs">
+                {cargando === `${r.tipo}-pdf` ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                PDF
+              </button>
+            </div>
           </div>
         ))}
       </div>

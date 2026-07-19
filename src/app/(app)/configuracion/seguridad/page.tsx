@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { requerirSesion } from '@/lib/auth/session'
 import { ConfigTabs } from '../ConfigTabs'
 import { CambiarPasswordForm } from './CambiarPasswordForm'
+import { CambiarEmailForm } from './CambiarEmailForm'
 
 export const metadata: Metadata = { title: 'Seguridad' }
 
@@ -14,6 +15,7 @@ export default async function SeguridadPage() {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ajustes del sistema</p>
       </div>
       <ConfigTabs />
+      <CambiarEmailForm email={sesion.email} />
       <CambiarPasswordForm email={sesion.email} />
     </div>
   )

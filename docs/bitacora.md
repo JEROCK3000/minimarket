@@ -46,7 +46,43 @@ Repo público github.com/JEROCK3000/minimarket. Verificado en HTTPS.
 fallaba por bloqueo del puerto 587 + SMTP intermitente: se implementó **fallback** (cloudcone
 → Gmail 465). Las copias locales cifradas nunca fallaron.
 
+## Iteración post-despliegue (julio 2026)
+
+Mejoras hechas ya con el sistema en producción (en orden de commits):
+
+1. **RIDE formato estándar SRI** con datos completos del cliente, desglose de IVA, logo de
+   empresa configurable y recuadros de altura dinámica. Fix de zona horaria Ecuador para la
+   fecha de emisión y visualización de los errores reales que devuelve el SRI.
+2. **Edición del cliente en caliente** durante la venta en el POS (teléfono, email, dirección).
+3. **Nota de Crédito** para anular facturas autorizadas: emisión ante el SRI con firma propia
+   (`signCreditNoteXml`), RIDE de NC y reenvío de comprobantes a un correo editable.
+4. **Dashboard con gráficas** de tendencia (ventas/gastos, diaria/mensual) y métodos de pago.
+5. **Impresión de comprobante** al terminar la venta (ticket térmico 80mm y A4).
+6. **Consulta de RUC propia**: primero una API contra el SRI que reemplazó a EcuadorAPI para
+   RUC, luego centralizada en `apiruc.solinteec.com`; la API Key se configura desde
+   Configuración (antes solo `.env`). Las cédulas siguen vía EcuadorAPI.
+
+## Sesión 2026-07-19 — cuenta y reportes
+
+1. **Recuperación de contraseña desde el login**: enlace "¿Olvidaste tu contraseña?" →
+   `/recuperar` envía por correo un enlace de un solo uso (token aleatorio, solo su hash
+   SHA-256 en BD, tabla `tokens_recuperacion`, validez 30 min) → `/restablecer/[token]`
+   define la nueva contraseña. Respuesta siempre genérica (no revela si el email existe),
+   rate limiting por email, rutas públicas agregadas al middleware.
+2. **Cambio del correo de la cuenta** en Configuración → Seguridad (verifica contraseña,
+   unicidad global y reemite el JWT). Permite reemplazar el correo por defecto del
+   desarrollo, requisito para que la recuperación llegue al correo real del usuario.
+3. **Reportes en PDF** (pendiente desde el despliegue): ventas, gastos e inventario con
+   generador común (`src/lib/reports/pdf-reporte.ts`, jsPDF + autotable) — encabezado,
+   filtros, totales, resumen por categoría (gastos), fecha de generación y numeración de
+   páginas. La UI de Reportes ofrece ahora Excel y PDF por reporte.
+
+Todo verificado en vivo con Playwright contra el build de producción local: flujo completo
+de recuperación (token inválido/reusado rechazado, login con la nueva contraseña), cambio de
+email (duplicado rechazado) y descarga de los tres PDF.
+
 ## Estado
 
-Sistema completo (13 módulos) en producción. Pendientes menores: Nota de Crédito para anular
-facturas autorizadas, reportes en PDF, cambiar contraseña del admin, considerar repo privado.
+Sistema completo en producción. Pendientes menores: historial de cierres de caja exportable,
+considerar repo privado. La contraseña del admin ya puede cambiarse desde la propia app
+(Configuración → Seguridad o recuperación por correo).

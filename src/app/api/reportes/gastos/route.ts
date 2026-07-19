@@ -3,8 +3,9 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { prisma } from '@/lib/db/prisma'
 import { registrarLog } from '@/lib/logs/logger'
 import ExcelJS from 'exceljs'
+import { generarReportePdf, usd } from '@/lib/reports/pdf-reporte'
 
-// GET /api/reportes/gastos?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+// GET /api/reportes/gastos?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&formato=excel|pdf
 export async function GET(request: NextRequest) {
   let sesion
   try {
@@ -23,6 +24,38 @@ export async function GET(request: NextRequest) {
       orderBy: { fecha: 'asc' },
     })
     const tenant = await prisma.tenant.findUnique({ where: { id: sesion.tenantId }, select: { nombre: true } })
+
+    if (searchParams.get('formato') === 'pdf') {
+      const porCategoria = new Map<string, number>()
+      let total = 0
+      const filas = gastos.map((g) => {
+        total += Number(g.monto)
+        porCategoria.set(g.categoria, (porCategoria.get(g.categoria) ?? 0) + Number(g.monto))
+        return [g.fecha.toLocaleDateString('es-EC'), g.categoria, g.descripcion, usd(Number(g.monto))]
+      })
+      const pdf = generarReportePdf({
+        empresa: tenant?.nombre || 'MiniMarket',
+        titulo: 'Reporte de Gastos',
+        subtitulo: `Del ${desde.toLocaleDateString('es-EC')} al ${hasta.toLocaleDateString('es-EC')} | ${gastos.length} gasto(s)`,
+        columnas: [
+          { header: 'Fecha', align: 'center' }, { header: 'Categoría' },
+          { header: 'Descripción' }, { header: 'Monto', align: 'right' },
+        ],
+        filas,
+        totales: ['', '', 'TOTAL', usd(total)],
+        resumen: {
+          titulo: 'Resumen por categoría',
+          filas: [...porCategoria.entries()].map(([cat, monto]) => [cat, usd(monto)] as [string, string]),
+        },
+      })
+      await registrarLog('AUDIT', 'REPORTES', `Reporte de gastos PDF generado por ${sesion.email}`, undefined, sesion.tenantId)
+      return new NextResponse(pdf, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="gastos_${desde.toISOString().slice(0, 10)}_${hasta.toISOString().slice(0, 10)}.pdf"`,
+        },
+      })
+    }
 
     const wb = new ExcelJS.Workbook()
     wb.creator = tenant?.nombre || 'MiniMarket'
