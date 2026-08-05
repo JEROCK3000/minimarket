@@ -3,6 +3,37 @@
 Registro cronológico de la construcción y despliegue del sistema, para que cualquier
 desarrollador o IA pueda continuar sin perder contexto.
 
+## Léeme primero — estado al 2026-08-05
+
+**Sistema en producción y estable.** Sin commits ni cambios de código desde el
+`8589387` (2026-07-19). Sin incidentes: última actividad registrada en logs de
+producción es una venta con factura autorizada el 2026-07-22. El repo local
+(`git status`) está limpio y sincronizado con `origin/main`.
+
+- **Qué hay**: 13+ módulos completos (POS, facturación SRI + Nota de Crédito,
+  inventario/kardex, compras, gastos, caja, clientes, dashboard con gráficas,
+  reportes Excel+PDF, recuperación de contraseña por correo, cambio de
+  email/contraseña de cuenta). Detalle módulo por módulo en `modulos.md`.
+- **Pendiente real, no técnico**: el admin (`dueno@minimarket.com`) sigue con el
+  correo y la contraseña del seed original. La función para cambiarlos existe desde
+  el 2026-07-19 (Configuración → Seguridad) pero nadie la ha usado todavía — es una
+  acción manual pendiente, no código por escribir. Ver `produccion.md` → Pendiente.
+- **Pendientes técnicos menores**: historial de cierres de caja exportable;
+  considerar pasar el repo de público a privado (github.com/JEROCK3000/minimarket).
+- **Antes de tocar algo**: lee este archivo completo (es corto) y `modulos.md`. Para
+  desplegar, ver `produccion.md` (`./scripts/deploy.sh minimarket` en el servidor,
+  vía SSH `root@server16.solinteec.com`, ya con la llave de host aceptada).
+- **Cómo se ha verificado cada cambio en este proyecto**: no solo build/typecheck —
+  se levanta el servidor, se dirige un navegador real (Playwright + Chrome del
+  sistema) contra los flujos afectados, se capturan pantallas, y si la prueba tocó
+  datos reales de la BD (contraseñas, emails, tokens) se restaura el estado original
+  al terminar. Mantener esa práctica en cambios futuros.
+- **Nota histórica (no requiere acción)**: en `origin/main` verás 4 commits del
+  31-jul/2-ago con archivos bajo `.github/shellpanel-*`. Fue el incidente de
+  seguridad global de GitHub de esas fechas; Solinteec ya lo remedió en todos sus
+  repos, incluido este. El árbol actual está limpio (verificado: sin rastro de esos
+  archivos, diff neto del rango = vacío). No malinterpretar como compromiso activo.
+
 ## Origen
 
 Nació como caso práctico de uso del **Solinteec Starter** (`../solinteec-starter`), la

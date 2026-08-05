@@ -62,4 +62,12 @@ El script hace: `git pull` + `npm install` + `prisma db push` (sin `--accept-dat
 6. `git init` + remote + `git pull` configurado para futuros deploys.
 
 ## Pendiente
-Cambiar la contraseña del admin desde Configuración → Seguridad (se creó con la del seed). Considerar hacer el repo privado (software propietario).
+
+- **Acción manual sin hacer todavía**: el usuario `dueno@minimarket.com` (ADMIN) sigue
+  con el correo y la contraseña del seed. La funcionalidad para cambiarlos ya existe
+  (Configuración → Seguridad, desde el 2026-07-19, ver `bitacora.md`) — falta que alguien
+  entre y lo haga. Confirmado por logs: sin eventos de cambio de email/contraseña hasta
+  el 2026-08-05.
+- Considerar hacer el repo privado (software propietario). Hoy es público:
+  github.com/JEROCK3000/minimarket.
+- Historial de cierres de caja exportable (ver `modulos.md`).
