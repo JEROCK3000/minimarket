@@ -8,6 +8,22 @@
  *   RUC_API_KEY   (la API key del servicio)
  */
 
+/**
+ * El SRI devuelve la dirección como PROVINCIA / CANTON / PARROQUIA / CALLE.
+ * Se conservan las dos últimas secciones (parroquia y calle), sin el nombre
+ * alterno entre paréntesis de la parroquia:
+ * "NAPO / QUIJOS / SAN FRANCISCO DE BORJA (VIRGILIO DAVILA) / 12 DE FEBRERO 22 Y 11 DE NOVIEMBRE"
+ * → "SAN FRANCISCO DE BORJA, 12 DE FEBRERO 22 Y 11 DE NOVIEMBRE".
+ * Una dirección sin "/" (p. ej. de la base local de apiruc) queda igual.
+ */
+export function depurarDireccion(direccion: string): string {
+  const partes = direccion.split('/').map((p) => p.trim()).filter(Boolean)
+  if (partes.length === 0) return direccion.trim()
+  const ultimas = partes.slice(-2)
+  if (ultimas.length === 2) ultimas[0] = ultimas[0].replace(/\s*\([^)]*\)/g, '').trim()
+  return ultimas.filter(Boolean).join(', ')
+}
+
 export interface ConsultaRucResultado {
   nombre: string
   direccion: string
@@ -37,7 +53,7 @@ export async function consultarRucSRI(ruc: string, keyOverride?: string): Promis
   const d = json.data
   return {
     nombre: String(d.razonSocial || '').trim().toUpperCase(),
-    direccion: String(d.direccionMatriz || '').trim().toUpperCase(),
+    direccion: depurarDireccion(String(d.direccionMatriz || '')).toUpperCase(),
     estado: d.estado || '',
   }
 }
@@ -79,7 +95,7 @@ export async function consultarCedulaApiRuc(cedula: string, keyOverride?: string
   const d = json.data
   return {
     nombre: String(d.nombre || '').trim().toUpperCase(),
-    direccion: String(d.direccion || '').trim().toUpperCase(),
+    direccion: depurarDireccion(String(d.direccion || '')).toUpperCase(),
     telefono: String(d.telefono || '').trim(),
     email: String(d.email || '').trim(),
     desdeSri: d.fuente === 'sri',
