@@ -252,6 +252,53 @@ async function consultarCedula(tenantId: string, cedula: string, rucKey: string 
   }
 }
 
+export interface ClienteRegistrado {
+  id: string
+  nombre: string
+  identificacion: string
+  tipoIdentificacion: string
+  telefono: string | null
+  email: string | null
+  direccion: string | null
+}
+
+const busquedaSchema = z.string().trim().max(60)
+
+/**
+ * Busca clientes ya registrados del tenant por nombre o por parte de la
+ * identificación (para elegirlos sin escribir el número completo). Con texto
+ * vacío devuelve los más recientes. Máximo 8 resultados.
+ */
+export async function buscarClientesRegistradosAction(texto: string): Promise<ClienteRegistrado[]> {
+  const sesion = await requerirTenant()
+  const parsed = busquedaSchema.safeParse(texto)
+  if (!parsed.success) return []
+  const q = parsed.data
+  const select = { id: true, nombre: true, identificacion: true, tipoIdentificacion: true, telefono: true, email: true, direccion: true }
+
+  if (q.length === 0) {
+    return prisma.cliente.findMany({
+      where: { tenantId: sesion.tenantId, activo: true },
+      orderBy: { updatedAt: 'desc' }, take: 8, select,
+    })
+  }
+  if (q.length < 2) return []
+
+  // Si lo escrito es un número (admite espacios/guiones), también por identificación.
+  const esNumero = /^[\d\s-]+$/.test(q)
+  const digitos = q.replace(/\D/g, '')
+  return prisma.cliente.findMany({
+    where: {
+      tenantId: sesion.tenantId, activo: true,
+      OR: [
+        { nombre: { contains: q } },
+        ...(esNumero && digitos.length >= 3 ? [{ identificacion: { contains: digitos } }] : []),
+      ],
+    },
+    orderBy: { nombre: 'asc' }, take: 8, select,
+  })
+}
+
 /**
  * Confirma en el SRI (vía apiruc) que un RUC exista, para cuando el operador
  * elige facturar con RUC a una persona de la que solo se conocía la cédula.

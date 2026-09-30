@@ -134,6 +134,14 @@ sin decir si es cédula o RUC; ahora se escribe solo el número y se detecta.
   el cliente. Antes, si el cliente cambiaba de cédula a RUC, una factura emitida
   después o su NC salían con el dato nuevo.
 - `registrarVentaAction` ahora valida que el `clienteId` sea del tenant.
+- **Buscar clientes registrados en el POS** (prop `sugerirRegistrados`): al escribir
+  un nombre o parte del número (≥2 caracteres) se listan hasta 8 clientes del tenant
+  (`buscarClientesRegistradosAction`, `contains` sobre collation `utf8mb4_unicode_ci`:
+  ignora mayúsculas y tildes); con el campo vacío, los 8 más recientes. Flechas +
+  Enter para elegir. Elegir uno de cédula/RUC pasa por el flujo normal (selector
+  Cédula/RUC incluido).
+- **Dirección del SRI**: se guardan las dos últimas secciones (parroquia, calle) sin
+  el nombre alterno entre paréntesis (`depurarDireccion` en `lib/sri/consulta-ruc.ts`).
 - **Migración**: `prisma db push` (2 columnas opcionales, sin pérdida) + backfill:
   `UPDATE ventas v JOIN clientes c ON c.id = v.clienteId SET v.tipoIdentificacionComprador = c.tipoIdentificacion, v.identificacionComprador = c.identificacion WHERE v.identificacionComprador IS NULL;`
 - **Verificación**: `tsc` y `npm run build` OK; lógica de detección y comprador

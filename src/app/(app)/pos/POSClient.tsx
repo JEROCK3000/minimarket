@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from 'react'
 import { Search, ShoppingCart, Plus, Minus, Trash2, Receipt, FileText, Loader2, CheckCircle2, X, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { registrarVentaAction, crearClienteRapidoAction, actualizarClienteRapidoAction } from './actions'
-import { IdentificacionInput, type ClienteEncontrado } from '@/components/forms/IdentificacionInput'
+import { IdentificacionInput, type ClienteEncontrado, type ClienteRegistrado } from '@/components/forms/IdentificacionInput'
 import { obtenerTicketAction } from './ticket-actions'
 import { imprimirTicket } from '@/lib/print/ticket'
 
@@ -279,6 +279,15 @@ function ClienteModal({ onClose, onSelect }: { onClose: () => void; onSelect: (c
     setMostrarForm(true)
   }
   const sinResultado = () => { setClienteId(null); setMostrarForm(true) }
+  // Cliente registrado elegido de la lista con pasaporte (cédula/RUC pasan por alEncontrar).
+  const alElegirRegistrado = (c: ClienteRegistrado) => {
+    setClienteId(c.id)
+    setF({
+      tipoIdentificacion: c.tipoIdentificacion, identificacion: c.identificacion, nombre: c.nombre,
+      telefono: c.telefono ?? '', email: c.email ?? '', direccion: c.direccion ?? '',
+    })
+    setMostrarForm(true)
+  }
 
   const guardarYUsar = async () => {
     if (!f.nombre.trim()) { toast.error('El nombre es requerido'); return }
@@ -317,6 +326,8 @@ function ClienteModal({ onClose, onSelect }: { onClose: () => void; onSelect: (c
             onChange={({ identificacion, tipo }) => setF((s) => ({ ...s, identificacion, tipoIdentificacion: tipo }))}
             onEncontrado={alEncontrar}
             onSinResultado={sinResultado}
+            sugerirRegistrados
+            onSeleccionRegistrado={alElegirRegistrado}
           />
           {!mostrarForm && f.tipoIdentificacion === 'PASAPORTE' && (
             <button type="button" onClick={sinResultado} className="btn-ghost w-full text-xs">Continuar con este documento</button>
