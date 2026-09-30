@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Loader2, Save, Search } from 'lucide-react'
+import { X, Loader2, Save } from 'lucide-react'
 import { toast } from 'sonner'
-import { crearClienteAction, actualizarClienteAction, consultarIdentificacionAction } from './actions'
+import { crearClienteAction, actualizarClienteAction } from './actions'
+import { IdentificacionInput } from '@/components/forms/IdentificacionInput'
 import type { ClienteRow } from './ClientesClient'
 
 export function ClienteForm({ cliente, onClose }: { cliente: ClienteRow | null; onClose: () => void }) {
@@ -17,22 +18,7 @@ export function ClienteForm({ cliente, onClose }: { cliente: ClienteRow | null; 
     direccion: cliente?.direccion ?? '',
   })
   const [loading, setLoading] = useState(false)
-  const [consultando, setConsultando] = useState(false)
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
-
-  const consultar = async () => {
-    if (!form.identificacion.trim()) { toast.error('Ingresa una identificación'); return }
-    setConsultando(true)
-    try {
-      const res = await consultarIdentificacionAction(form.identificacion)
-      if (res.success) {
-        setForm((f) => ({ ...f, nombre: res.nombre || f.nombre, direccion: res.direccion || f.direccion }))
-        toast.success(res.origen === 'LOCAL' ? 'Cliente ya registrado' : 'Datos encontrados')
-      } else {
-        toast.error(res.error || 'No se encontraron datos')
-      }
-    } finally { setConsultando(false) }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,26 +39,17 @@ export function ClienteForm({ cliente, onClose }: { cliente: ClienteRow | null; 
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Tipo *</label>
-              <select value={form.tipoIdentificacion} onChange={(e) => set('tipoIdentificacion', e.target.value)} className="input">
-                <option value="CEDULA">Cédula</option>
-                <option value="RUC">RUC</option>
-                <option value="PASAPORTE">Pasaporte</option>
-                <option value="CONSUMIDOR_FINAL">Consumidor Final</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Identificación *</label>
-              <div className="flex gap-1.5">
-                <input value={form.identificacion} onChange={(e) => set('identificacion', e.target.value)} className="input font-mono" required maxLength={15} />
-                <button type="button" onClick={consultar} disabled={consultando} className="btn-ghost shrink-0 px-2.5" title="Consultar en EcuadorAPI">
-                  {consultando ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
-                </button>
-              </div>
-            </div>
-          </div>
+          <IdentificacionInput
+            identificacion={form.identificacion}
+            tipo={form.tipoIdentificacion}
+            consultaAutomatica={!esEdicion}
+            onChange={({ identificacion, tipo }) => setForm((f) => ({ ...f, identificacion, tipoIdentificacion: tipo }))}
+            onEncontrado={(r) => setForm((f) => ({
+              ...f,
+              nombre: r.nombre || f.nombre, direccion: r.direccion || f.direccion,
+              telefono: r.telefono || f.telefono, email: r.email || f.email,
+            }))}
+          />
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Nombre / Razón social *</label>

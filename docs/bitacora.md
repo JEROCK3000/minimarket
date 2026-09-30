@@ -112,6 +112,38 @@ Todo verificado en vivo con Playwright contra el build de producción local: flu
 de recuperación (token inválido/reusado rechazado, login con la nueva contraseña), cambio de
 email (duplicado rechazado) y descarga de los tres PDF.
 
+## Sesión 2026-09-30 — identificación con detección automática (cédula / RUC)
+
+Mismo cambio aplicado en ecofacturacion. **Motivo:** el cliente dicta su número
+sin decir si es cédula o RUC; ahora se escribe solo el número y se detecta.
+
+- **Componente `src/components/forms/IdentificacionInput.tsx`** en Clientes
+  (`ClienteForm`) y en el modal "Cliente para la factura" del POS. Consulta
+  automática al completar 10/13 dígitos (pausa 800 ms), Enter o lupa. Persona
+  natural → "Facturar con: [Cédula] [RUC]" (RUC = cédula+001, verificado en el
+  SRI con `verificarRucAction` si no se sabe). Pasaporte vía "Otro tipo".
+- **Detección** en `src/lib/clientes/identificacion.ts` (sin dependencias).
+- **`consultarIdentificacionAction`** (clientes/actions): BD del tenant buscando la
+  persona por sus dos formas (sin duplicar) → RUC vía apiruc `/ruc` → cédula vía
+  apiruc `/cedula` (gratis, misma `ruc_api_key`) → EcuadorAPI de respaldo.
+  Se eliminó `buscarClienteAction` del POS (la búsqueda la hace esta acción).
+- **Identificación congelada en la venta**: `Venta.tipoIdentificacionComprador` /
+  `identificacionComprador` se llenan al vender. Factura (`sri-actions`), Nota de
+  Crédito (`nc-actions`), RIDE (`factura-actions`), vista previa y ticket usan
+  `compradorDeVenta()` (`src/lib/ventas/comprador.ts`); ventas antiguas (NULL) usan
+  el cliente. Antes, si el cliente cambiaba de cédula a RUC, una factura emitida
+  después o su NC salían con el dato nuevo.
+- `registrarVentaAction` ahora valida que el `clienteId` sea del tenant.
+- **Migración**: `prisma db push` (2 columnas opcionales, sin pérdida) + backfill:
+  `UPDATE ventas v JOIN clientes c ON c.id = v.clienteId SET v.tipoIdentificacionComprador = c.tipoIdentificacion, v.identificacionComprador = c.identificacion WHERE v.identificacionComprador IS NULL;`
+- **Verificación**: `tsc` y `npm run build` OK; lógica de detección y comprador
+  probada por script. No se pudo probar en navegador en local (sin credenciales
+  locales conocidas); verificar en producción.
+- **`rucEcuatorianoValido`** (`src/lib/validators`): sociedades (9) y entidades
+  públicas (6) ya no validan dígito verificador mod-11, solo estructura (sufijo
+  001/0001). Rechazaba RUCs reales de S.A.S. (p. ej. `1793212860001`); mismo
+  criterio que apiruc (`docs/ruc.md`). Persona natural sigue validando la cédula.
+
 ## Estado
 
 Sistema completo en producción. Pendientes menores: historial de cierres de caja exportable,

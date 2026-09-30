@@ -7,6 +7,7 @@ import { generarRidePDF } from '@/lib/reports/ride'
 import { enviarFacturaPorEmail } from '@/lib/utils/email'
 import { format } from 'date-fns'
 import { readFileSync, existsSync } from 'fs'
+import { compradorDeVenta } from '@/lib/ventas/comprador'
 
 /** Carga el logo del emisor desde disco y lo devuelve como base64 para el RIDE. */
 function cargarLogo(logoPath: string | null): { base64: string; formato: 'PNG' | 'JPEG' } | null {
@@ -64,7 +65,7 @@ async function construirRide(tenantId: string, ventaId: string) {
     },
     cliente: {
       nombre: venta.cliente?.nombre ?? 'CONSUMIDOR FINAL',
-      identificacion: venta.cliente?.identificacion ?? '9999999999999',
+      identificacion: compradorDeVenta(venta)?.identificacion ?? '9999999999999',
       direccion: venta.cliente?.direccion ?? null,
       email: venta.cliente?.email ?? null,
     },
@@ -165,7 +166,7 @@ async function construirRideNC(tenantId: string, ventaId: string) {
     },
     notaCredito: { docModificadoNumero: numFactura, motivo: venta.notaCredito.motivo },
     cliente: {
-      nombre: venta.cliente?.nombre ?? 'CONSUMIDOR FINAL', identificacion: venta.cliente?.identificacion ?? '9999999999999',
+      nombre: venta.cliente?.nombre ?? 'CONSUMIDOR FINAL', identificacion: compradorDeVenta(venta)?.identificacion ?? '9999999999999',
       direccion: venta.cliente?.direccion ?? null, email: venta.cliente?.email ?? null,
     },
     items: venta.items.map((it) => ({

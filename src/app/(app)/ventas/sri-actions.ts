@@ -9,6 +9,7 @@ import { generateInvoiceXml, getP12FromLocalFile, documentReception, documentAut
 import { signInvoiceXml } from 'ec-sri-invoice-signer'
 import { format } from 'date-fns'
 import { ENDPOINTS_SRI, mapTipoIdentificacion, generarClaveAcceso, envolverFactura } from '@/lib/sri/helpers'
+import { compradorDeVenta } from '@/lib/ventas/comprador'
 
 /**
  * Emite la factura electrónica de una venta al SRI.
@@ -25,6 +26,7 @@ export async function emitirFacturaVentaAction(ventaId: string) {
     })
     if (!venta) throw new Error('Venta no encontrada')
     if (!venta.cliente) throw new Error('La venta no tiene cliente asignado para facturar')
+    const comprador = compradorDeVenta(venta)!
     if (venta.factura?.estado === 'AUTORIZADA') throw new Error('Esta venta ya tiene factura autorizada')
 
     const emisor = await prisma.emisorSRI.findUnique({ where: { tenantId: sesion.tenantId } })
@@ -65,9 +67,9 @@ export async function emitirFacturaVentaAction(ventaId: string) {
         dirEstablecimiento: emisor.dirEstablecimiento,
         contribuyenteEspecial: emisor.contribuyenteEspecial || undefined,
         obligadoContabilidad: emisor.obligadoContabilidad ? ('SI' as const) : ('NO' as const),
-        tipoIdentificacionComprador: mapTipoIdentificacion(venta.cliente.tipoIdentificacion),
+        tipoIdentificacionComprador: mapTipoIdentificacion(comprador.tipoIdentificacion),
         razonSocialComprador: venta.cliente.nombre,
-        identificacionComprador: venta.cliente.identificacion,
+        identificacionComprador: comprador.identificacion,
         direccionComprador: venta.cliente.direccion || emisor.dirEstablecimiento,
         totalSinImpuestos: subtotalNeto.toFixed(2),
         totalDescuento: Number(venta.descuento).toFixed(2),

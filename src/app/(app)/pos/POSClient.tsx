@@ -3,8 +3,8 @@
 import { useState, useMemo, useRef } from 'react'
 import { Search, ShoppingCart, Plus, Minus, Trash2, Receipt, FileText, Loader2, CheckCircle2, X, Printer } from 'lucide-react'
 import { toast } from 'sonner'
-import { registrarVentaAction, buscarClienteAction, crearClienteRapidoAction, actualizarClienteRapidoAction } from './actions'
-import { consultarIdentificacionAction } from '../clientes/actions'
+import { registrarVentaAction, crearClienteRapidoAction, actualizarClienteRapidoAction } from './actions'
+import { IdentificacionInput, type ClienteEncontrado } from '@/components/forms/IdentificacionInput'
 import { obtenerTicketAction } from './ticket-actions'
 import { imprimirTicket } from '@/lib/print/ticket'
 
@@ -259,7 +259,6 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
 function ClienteModal({ onClose, onSelect }: { onClose: () => void; onSelect: (c: ClienteSel) => void }) {
   const [clienteId, setClienteId] = useState<string | null>(null) // null = nuevo
   const [mostrarForm, setMostrarForm] = useState(false)
-  const [buscando, setBuscando] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [f, setF] = useState({
     tipoIdentificacion: 'CEDULA', identificacion: '', nombre: '',
@@ -267,35 +266,19 @@ function ClienteModal({ onClose, onSelect }: { onClose: () => void; onSelect: (c
   })
   const set = (k: keyof typeof f, v: string) => setF((s) => ({ ...s, [k]: v }))
 
-  const buscar = async () => {
-    if (!f.identificacion.trim()) { toast.error('Ingresa una identificación'); return }
-    setBuscando(true)
-    try {
-      // 1) Cliente ya registrado → cargar TODOS sus datos (editables)
-      const local = await buscarClienteAction(f.identificacion)
-      if (local.success && local.cliente) {
-        const c = local.cliente
-        setClienteId(c.id)
-        setF({
-          tipoIdentificacion: c.tipoIdentificacion, identificacion: c.identificacion, nombre: c.nombre,
-          telefono: c.telefono ?? '', email: c.email ?? '', direccion: c.direccion ?? '',
-        })
-        setMostrarForm(true)
-        toast.success('Cliente encontrado. Puedes corregir sus datos.')
-        return
-      }
-      // 2) Cliente nuevo → consultar EcuadorAPI para autocompletar
-      const api = await consultarIdentificacionAction(f.identificacion)
-      setClienteId(null)
-      if (api.success && api.nombre) {
-        setF((s) => ({ ...s, nombre: api.nombre || '', direccion: api.direccion || s.direccion }))
-        toast.success('Datos encontrados. Completa y registra.')
-      } else {
-        toast.message('Cliente nuevo', { description: api.error || 'Completa los datos para registrarlo' })
-      }
-      setMostrarForm(true)
-    } finally { setBuscando(false) }
+  // La consulta (BD local → apiruc → EcuadorAPI) la hace IdentificacionInput.
+  // Cliente ya registrado → se cargan TODOS sus datos (editables) y se actualiza
+  // con la venta; nuevo → se autocompleta y se registra.
+  const alEncontrar = (r: ClienteEncontrado) => {
+    setClienteId(r.cliente?.id ?? null)
+    setF((s) => ({
+      ...s,
+      nombre: r.nombre || s.nombre, direccion: r.direccion || s.direccion,
+      telefono: r.telefono || s.telefono, email: r.email || s.email,
+    }))
+    setMostrarForm(true)
   }
+  const sinResultado = () => { setClienteId(null); setMostrarForm(true) }
 
   const guardarYUsar = async () => {
     if (!f.nombre.trim()) { toast.error('El nombre es requerido'); return }
@@ -328,26 +311,16 @@ function ClienteModal({ onClose, onSelect }: { onClose: () => void; onSelect: (c
           <button onClick={onClose} className="p-1 text-gray-400"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className={lbl}>Tipo *</label>
-              <select value={f.tipoIdentificacion} onChange={(e) => set('tipoIdentificacion', e.target.value)} className="input">
-                <option value="CEDULA">Cédula</option>
-                <option value="RUC">RUC</option>
-                <option value="PASAPORTE">Pasaporte</option>
-                <option value="CONSUMIDOR_FINAL">Consumidor Final</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className={lbl}>Identificación *</label>
-              <div className="flex gap-1.5">
-                <input value={f.identificacion} onChange={(e) => set('identificacion', e.target.value)} className="input font-mono" placeholder="Cédula o RUC" />
-                <button onClick={buscar} disabled={buscando} className="btn-ghost shrink-0 px-2.5" title="Buscar / consultar">
-                  {buscando ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
-                </button>
-              </div>
-            </div>
-          </div>
+          <IdentificacionInput
+            identificacion={f.identificacion}
+            tipo={f.tipoIdentificacion}
+            onChange={({ identificacion, tipo }) => setF((s) => ({ ...s, identificacion, tipoIdentificacion: tipo }))}
+            onEncontrado={alEncontrar}
+            onSinResultado={sinResultado}
+          />
+          {!mostrarForm && f.tipoIdentificacion === 'PASAPORTE' && (
+            <button type="button" onClick={sinResultado} className="btn-ghost w-full text-xs">Continuar con este documento</button>
+          )}
 
           {mostrarForm && (
             <>

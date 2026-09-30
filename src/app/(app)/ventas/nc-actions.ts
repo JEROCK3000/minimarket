@@ -10,6 +10,7 @@ import { signCreditNoteXml } from 'ec-sri-invoice-signer'
 import { format } from 'date-fns'
 import { ENDPOINTS_SRI, mapTipoIdentificacion, generarClaveAcceso } from '@/lib/sri/helpers'
 import { generarXmlNotaCredito } from '@/lib/sri/nota-credito'
+import { compradorDeVenta } from '@/lib/ventas/comprador'
 
 /**
  * Emite una Nota de Crédito que anula por completo una factura autorizada.
@@ -35,6 +36,8 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
       return { error: 'Esta factura ya tiene una nota de crédito autorizada' }
     }
     if (!venta.cliente) return { error: 'La factura no tiene cliente asignado' }
+    // Mismo comprador que la factura original, aunque el cliente haya cambiado después.
+    const comprador = compradorDeVenta(venta)!
 
     const emisor = await prisma.emisorSRI.findUnique({ where: { tenantId: sesion.tenantId } })
     if (!emisor) return { error: 'Emisor SRI no configurado' }
@@ -78,9 +81,9 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
       infoNotaCredito: {
         fechaEmision: format(new Date(), 'dd/MM/yyyy'),
         dirEstablecimiento: emisor.dirEstablecimiento,
-        tipoIdentificacionComprador: mapTipoIdentificacion(venta.cliente.tipoIdentificacion),
+        tipoIdentificacionComprador: mapTipoIdentificacion(comprador.tipoIdentificacion),
         razonSocialComprador: venta.cliente.nombre,
-        identificacionComprador: venta.cliente.identificacion,
+        identificacionComprador: comprador.identificacion,
         obligadoContabilidad: emisor.obligadoContabilidad ? 'SI' : 'NO',
         codDocModificado: '01',
         numDocModificado,

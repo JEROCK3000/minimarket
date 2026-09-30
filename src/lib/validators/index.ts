@@ -34,7 +34,15 @@ export function cedulaEcuatorianaValida(cedula: string): boolean {
   return digito === parseInt(c.charAt(9), 10)
 }
 
-/** RUC ecuatoriano (13 dígitos): personas naturales, sociedades y entidades públicas. */
+/**
+ * RUC ecuatoriano (13 dígitos): personas naturales, sociedades y entidades públicas.
+ *
+ * En sociedades (9) y entidades públicas (6) se valida solo la ESTRUCTURA, no el
+ * dígito verificador módulo 11: hay RUCs reales y activos en el SRI (p. ej.
+ * sociedades por acciones simplificadas, S.A.S., como 1793212860001) que no lo
+ * cumplen, y rechazarlos impedía registrar clientes reales. El SRI es la fuente
+ * autoritativa de existencia (mismo criterio que apiruc, ver su docs/ruc.md).
+ */
 export function rucEcuatorianoValido(ruc: string): boolean {
   const c = ruc.trim()
   if (!/^\d{13}$/.test(c)) return false
@@ -45,27 +53,12 @@ export function rucEcuatorianoValido(ruc: string): boolean {
   // Persona natural: mismos primeros 10 dígitos válidos como cédula + termina en 001
   if (tercero < 6) return c.endsWith('001') && cedulaEcuatorianaValida(c.substring(0, 10))
 
-  // Sociedad privada (9): módulo 11 con coeficientes 4..2, termina en 001
-  if (tercero === 9) {
-    if (!c.endsWith('001')) return false
-    const coef = [4, 3, 2, 7, 6, 5, 4, 3, 2]
-    let suma = 0
-    for (let i = 0; i < 9; i++) suma += parseInt(c.charAt(i), 10) * coef[i]
-    const res = suma % 11
-    const dig = res === 0 ? 0 : 11 - res
-    return dig === parseInt(c.charAt(9), 10)
-  }
+  // Sociedad privada (9): termina en 001
+  if (tercero === 9) return c.endsWith('001')
 
-  // Entidad pública (6): módulo 11 con coeficientes 3..2 sobre 8 dígitos, termina en 0001
-  if (tercero === 6) {
-    if (!c.endsWith('0001')) return false
-    const coef = [3, 2, 7, 6, 5, 4, 3, 2]
-    let suma = 0
-    for (let i = 0; i < 8; i++) suma += parseInt(c.charAt(i), 10) * coef[i]
-    const res = suma % 11
-    const dig = res === 0 ? 0 : 11 - res
-    return dig === parseInt(c.charAt(8), 10)
-  }
+  // Entidad pública (6): termina en 0001
+  if (tercero === 6) return c.endsWith('0001')
+
   return false
 }
 

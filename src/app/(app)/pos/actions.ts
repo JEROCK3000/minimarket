@@ -55,6 +55,16 @@ export async function registrarVentaAction(data: VentaFormValues) {
       return { error: 'Para emitir factura electrónica selecciona un cliente' }
     }
 
+    // El cliente debe ser del tenant; su identificación se congela en la venta
+    // (puede facturar otro día con cédula o RUC sin alterar esta venta).
+    const comprador = d.clienteId
+      ? await prisma.cliente.findFirst({
+          where: { id: d.clienteId, tenantId: sesion.tenantId },
+          select: { tipoIdentificacion: true, identificacion: true },
+        })
+      : null
+    if (d.clienteId && !comprador) return { error: 'Cliente no encontrado' }
+
     // Totales (IVA incluido por producto)
     let subtotal = 0
     let iva = 0
@@ -75,6 +85,8 @@ export async function registrarVentaAction(data: VentaFormValues) {
         data: {
           tenantId: sesion.tenantId,
           clienteId: d.clienteId || null,
+          tipoIdentificacionComprador: comprador?.tipoIdentificacion ?? null,
+          identificacionComprador: comprador?.identificacion ?? null,
           usuarioId: sesion.sub,
           numero,
           formaPago: d.formaPago,
@@ -144,19 +156,8 @@ export async function registrarVentaAction(data: VentaFormValues) {
   }
 }
 
-// ─── Buscar/crear/actualizar cliente rápido en el POS ─────────────────────────
-export async function buscarClienteAction(identificacion: string) {
-  const sesion = await requerirTenant()
-  const clean = identificacion.trim()
-  if (!clean) return { error: 'Ingresa una identificación' }
-  const cliente = await prisma.cliente.findFirst({
-    where: { tenantId: sesion.tenantId, identificacion: clean },
-    select: { id: true, nombre: true, identificacion: true, tipoIdentificacion: true, telefono: true, email: true, direccion: true },
-  })
-  if (!cliente) return { error: 'Cliente no encontrado' }
-  return { success: true, cliente }
-}
-
+// ─── Crear/actualizar cliente rápido en el POS ────────────────────────────────
+// (la búsqueda la hace consultarIdentificacionAction de clientes/actions)
 const clienteRapidoSchema = z.object({
   identificacion: z.string().trim().min(3).max(15),
   nombre: z.string().trim().min(1).max(200),

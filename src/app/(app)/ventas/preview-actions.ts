@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/db/prisma'
 import { requerirTenant } from '@/lib/auth/tenant'
 import { format } from 'date-fns'
+import { compradorDeVenta } from '@/lib/ventas/comprador'
 
 /** Devuelve los datos proyectados de la factura de una venta, SIN emitirla al SRI. */
 export async function obtenerVistaPreviaFacturaAction(ventaId: string) {
@@ -35,7 +36,7 @@ export async function obtenerVistaPreviaFacturaAction(ventaId: string) {
         ambiente: emisor.ambiente === 2 ? 'PRODUCCIÓN' : 'PRUEBAS',
       },
       cliente: venta.cliente
-        ? { nombre: venta.cliente.nombre, identificacion: venta.cliente.identificacion }
+        ? { nombre: venta.cliente.nombre, identificacion: compradorDeVenta(venta)!.identificacion }
         : { nombre: 'CONSUMIDOR FINAL', identificacion: '9999999999999' },
       numeroFactura,
       fecha: format(venta.fecha, 'dd/MM/yyyy'),

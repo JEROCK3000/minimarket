@@ -297,6 +297,9 @@ model Venta {
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   clienteId   String?
   cliente     Cliente?  @relation(fields: [clienteId], references: [id])
+  // Identificación con que se emitió (congelada al vender; ver src/lib/ventas/comprador.ts)
+  tipoIdentificacionComprador String? @db.VarChar(20)
+  identificacionComprador     String? @db.VarChar(15)
   usuarioId   String? // cajero que hizo la venta
   usuario     Usuario?  @relation(fields: [usuarioId], references: [id])
 
