@@ -4,7 +4,7 @@
  * el servidor genera los bytes ESC/POS (pos/print-actions.ts) y aquí se
  * entregan al agente, que los reenvía al puerto 9100 de la impresora.
  */
-import { ticketTermicoAction, ticketPruebaAction } from '@/app/(app)/pos/print-actions'
+import { ticketTermicoAction, ticketPruebaAction, etiquetasTermicaAction } from '@/app/(app)/pos/print-actions'
 
 export const PUERTO_AGENTE = 9448
 export const URL_AGENTE = `https://127.0.0.1:${PUERTO_AGENTE}`
@@ -37,6 +37,14 @@ export async function imprimirVentaTermica(ventaId: string): Promise<'FACTURA' |
   if ('error' in r) throw new Error(r.error)
   await enviarAlAgente(r.datosBase64, r.ip)
   return r.tipo
+}
+
+/** Etiquetas de precio de los productos indicados. */
+export async function imprimirEtiquetas(productoIds: string[]) {
+  const r = await etiquetasTermicaAction(productoIds)
+  if ('sinImpresora' in r) throw new SinImpresoraError()
+  if ('error' in r) throw new Error(r.error)
+  await enviarAlAgente(r.datosBase64, r.ip)
 }
 
 /** Ticket de prueba a la IP indicada. */

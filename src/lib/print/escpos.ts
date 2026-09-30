@@ -227,3 +227,43 @@ export function ticketPrueba(nombreNegocio: string, ip: string): Buffer {
   out += cierre('Si lees esto y el papel se corto solo, la impresora esta lista.')
   return codificar(out)
 }
+
+// ─── Etiquetas de precio ──────────────────────────────────────────────────────
+export interface EtiquetaPrecio { negocio: string; nombre: string; precioFinal: number; unidad: string; codigoBarras: string | null }
+
+const DOBLE_ANCHO_ALTO = '\x1D\x21\x11' // GS ! 0x11
+
+/** ¿EAN-13 válido (13 dígitos con dígito de control correcto)? */
+function esEan13(c: string) {
+  if (!/^\d{13}$/.test(c)) return false
+  const suma = c.slice(0, 12).split('').reduce((s, d, i) => s + Number(d) * (i % 2 ? 3 : 1), 0)
+  return (10 - (suma % 10)) % 10 === Number(c[12])
+}
+
+/** Código de barras ESC/POS (GS k): EAN-13 si aplica, si no CODE128 (juego B, ASCII imprimible). */
+function codigoDeBarras(codigo: string): string {
+  const alto = '\x1D\x68\x50'   // GS h 80 puntos
+  const ancho = '\x1D\x77\x02'  // GS w 2
+  const hri = '\x1D\x48\x02'    // GS H 2: texto debajo
+  if (esEan13(codigo)) return alto + ancho + hri + '\x1D\x6B\x43\x0D' + codigo  // GS k 67 13
+  const datos = '{B' + codigo.replace(/[^\x20-\x7E]/g, '').slice(0, 40)
+  return alto + ancho + hri + '\x1D\x6B\x49' + String.fromCharCode(datos.length) + datos // GS k 73 n
+}
+
+/** Etiquetas de precio (una o varias, con separador y un solo corte al final). */
+export function etiquetasPrecio(etiquetas: EtiquetaPrecio[]): Buffer {
+  let out = INIT + PAGINA_CP850
+  etiquetas.forEach((e, i) => {
+    out += CENTRO
+    out += envolver(limpio(e.negocio).toUpperCase())
+    out += NEGRITA_ON + envolver(limpio(e.nombre).toUpperCase()) + NEGRITA_OFF
+    out += DOBLE_ANCHO_ALTO + NEGRITA_ON + `$${e.precioFinal.toFixed(2)}\n` + NEGRITA_OFF + TAMANO_NORMAL
+    out += `PVP por ${limpio(e.unidad)} - IVA incluido\n`
+    const codigo = limpio(e.codigoBarras)
+    if (codigo) out += '\n' + codigoDeBarras(codigo) + '\n'
+    out += IZQUIERDA
+    out += i < etiquetas.length - 1 ? '\n' + '- '.repeat(ANCHO / 2) + '\n\n' : ''
+  })
+  out += '\n'.repeat(6) + CORTE_TOTAL
+  return codificar(out)
+}

@@ -238,3 +238,5 @@ evolución, desplegando cada fase. Orden y estado:
 Sistema completo en producción. Pendientes menores: historial de cierres de caja exportable,
 considerar repo privado. La contraseña del admin ya puede cambiarse desde la propia app
 (Configuración → Seguridad o recuperación por correo).
+
+**Evolución (parcial, desplegada 2026-09-30)**: visor de auditoría (`/auditoria`, ADMIN), PWA (manifest, íconos, `/manifest.webmanifest` excluido del middleware), etiquetas de precio ESC/POS con código de barras (EAN-13/CODE128) desde Productos, backend de importación Excel (`productos/importar-actions.ts` + `/api/productos/plantilla`, límite server actions 3 MB). **Pendiente**: pantalla de importación (botón + modal en Productos), fechas de vencimiento, fiado/CxC/CxP, devoluciones parciales.

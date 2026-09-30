@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Search, Pencil, AlertTriangle, Package, History, Tags } from 'lucide-react'
+import { Plus, Search, Pencil, AlertTriangle, Package, History, Tags, Tag, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { imprimirEtiquetas } from '@/lib/print/termica'
 import { ProductoForm } from './ProductoForm'
 import { KardexModal } from './KardexModal'
 import { CategoriasModal } from './CategoriasModal'
@@ -41,6 +43,18 @@ export function ProductosClient({
   const [kardexId, setKardexId] = useState<string | null>(null)
   const [verCategorias, setVerCategorias] = useState(false)
   const [soloStockBajo, setSoloStockBajo] = useState(false)
+  const [imprimiendo, setImprimiendo] = useState<string | null>(null)
+
+  const etiquetas = async (ids: string[], clave: string) => {
+    if (ids.length > 100) { toast.error('Máximo 100 etiquetas por vez: filtra la lista'); return }
+    setImprimiendo(clave)
+    try {
+      await imprimirEtiquetas(ids)
+      toast.success(`${ids.length} etiqueta(s) enviada(s) a la impresora`)
+    } catch (err: any) {
+      toast.error(err.message || 'No se pudo imprimir')
+    } finally { setImprimiendo(null) }
+  }
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase().trim()
@@ -80,6 +94,9 @@ export function ProductosClient({
           <div className="flex gap-2">
             <button onClick={() => setVerCategorias(true)} className="btn-ghost">
               <Tags size={16} /> Categorías
+            </button>
+            <button onClick={() => etiquetas(filtrados.map((p) => p.id), 'lista')} disabled={!!imprimiendo || filtrados.length === 0} className="btn-ghost" title="Imprimir etiquetas de precio de los productos listados (térmica)">
+              {imprimiendo === 'lista' ? <Loader2 size={16} className="animate-spin" /> : <Tag size={16} />} Etiquetas ({filtrados.length})
             </button>
             <button onClick={abrirNuevo} className="btn-primary">
               <Plus size={16} /> Nuevo producto
@@ -152,6 +169,15 @@ export function ProductosClient({
                           aria-label={`Kardex de ${p.nombre}`}
                         >
                           <History size={15} />
+                        </button>
+                        <button
+                          onClick={() => etiquetas([p.id], p.id)}
+                          disabled={!!imprimiendo}
+                          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition"
+                          title="Imprimir etiqueta de precio"
+                          aria-label={`Etiqueta de ${p.nombre}`}
+                        >
+                          {imprimiendo === p.id ? <Loader2 size={15} className="animate-spin" /> : <Tag size={15} />}
                         </button>
                         {puedeEditar && (
                           <button

@@ -7,7 +7,8 @@ import { format } from 'date-fns'
 import { calcularVenta } from '@/lib/ventas/totales'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
 import { formaPagoSri } from '@/lib/sri/impuestos'
-import { ticketFactura, ticketVenta, ticketPrueba } from '@/lib/print/escpos'
+import { ticketFactura, ticketVenta, ticketPrueba, etiquetasPrecio } from '@/lib/print/escpos'
+import { redondear2 } from '@/lib/ventas/totales'
 import { leerIpImpresora, ipValida } from '@/lib/print/impresora-config'
 
 export type ResultadoTicketTermico =
@@ -100,4 +101,34 @@ export async function ticketPruebaAction(ip: string): Promise<{ success: true; d
   ])
   const nombre = emisor?.nombreComercial || emisor?.razonSocial || tenant?.nombre || 'MiniMarket'
   return { success: true, datosBase64: ticketPrueba(nombre, limpia).toString('base64'), ip: limpia }
+}
+
+/** Etiquetas de precio (PVP con IVA) de hasta 100 productos del tenant, en la térmica. */
+export async function etiquetasTermicaAction(productoIds: string[]): Promise<ResultadoTicketTermico> {
+  const sesion = await requerirTenant()
+  const ids = [...new Set((Array.isArray(productoIds) ? productoIds : []).filter((x) => typeof x === 'string'))].slice(0, 100)
+  if (ids.length === 0) return { error: 'No hay productos para etiquetar' }
+  try {
+    const ip = await leerIpImpresora(sesion.tenantId)
+    if (!ip) return { sinImpresora: true }
+    const [productos, emisor, tenant] = await Promise.all([
+      prisma.producto.findMany({
+        where: { id: { in: ids }, tenantId: sesion.tenantId },
+        select: { id: true, nombre: true, precioVenta: true, ivaPorcentaje: true, unidad: true, codigoBarras: true },
+      }),
+      prisma.emisorSRI.findUnique({ where: { tenantId: sesion.tenantId }, select: { nombreComercial: true, razonSocial: true } }),
+      prisma.tenant.findUnique({ where: { id: sesion.tenantId }, select: { nombre: true } }),
+    ])
+    const orden = new Map(ids.map((id, i) => [id, i]))
+    productos.sort((a, b) => (orden.get(a.id) ?? 0) - (orden.get(b.id) ?? 0))
+    const negocio = emisor?.nombreComercial || emisor?.razonSocial || tenant?.nombre || 'MiniMarket'
+    const bytes = etiquetasPrecio(productos.map((p) => ({
+      negocio, nombre: p.nombre, unidad: p.unidad, codigoBarras: p.codigoBarras,
+      precioFinal: redondear2(Number(p.precioVenta) * (1 + Number(p.ivaPorcentaje) / 100)),
+    })))
+    return { success: true, datosBase64: bytes.toString('base64'), ip, tipo: 'TICKET' }
+  } catch (error: any) {
+    await registrarLog('ERROR', 'IMPRESION', `Error generando etiquetas: ${error.message || error}`, undefined, sesion.tenantId)
+    return { error: 'No se pudieron generar las etiquetas' }
+  }
 }

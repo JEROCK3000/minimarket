@@ -13,11 +13,14 @@ export const metadata: Metadata = {
   },
   description: 'Aplicación SaaS de Solinteec',
   robots: 'noindex',
+  icons: { icon: '/icon.svg', apple: '/apple-touch-icon.png' },
+  appleWebApp: { capable: true, title: process.env.NEXT_PUBLIC_APP_NAME || 'MiniMarket', statusBarStyle: 'default' },
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  themeColor: '#2563eb',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

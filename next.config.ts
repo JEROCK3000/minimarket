@@ -12,6 +12,8 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // Importación de productos (.xlsx de hasta 2 MB) vía server action.
+  experimental: { serverActions: { bodySizeLimit: '3mb' } },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }]
   },
