@@ -32,7 +32,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.21.0",
-    "next": "16.2.9",
+    "next": "16.3.7",
     "next-themes": "^0.4.6",
     "nodemailer": "^9.0.1",
     "open-factura": "^0.1.1",
@@ -40,6 +40,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
+    "sharp": "0.35.5",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "zod": "^3.24.1"
@@ -52,7 +53,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "16.3.7",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "typescript": "^5"

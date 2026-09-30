@@ -5,6 +5,7 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { guardarImagenProducto, eliminarArchivo, ErrorImagen } from '@/lib/productos/imagenes'
 
 const productoSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es requerido').max(150),
@@ -74,7 +75,7 @@ export async function crearProductoAction(data: ProductoFormValues) {
 
     await registrarLog('AUDIT', 'PRODUCTOS', `Producto creado: ${d.nombre}`, undefined, sesion.tenantId)
     revalidatePath('/productos')
-    return { success: true }
+    return { success: true, id: producto.id }
   } catch (error: any) {
     if (error.code === 'P2002') return { error: 'Ya existe un producto con ese código de barras' }
     await registrarLog('ERROR', 'PRODUCTOS', `Error creando producto: ${error.message || error}`, undefined, sesion.tenantId)
@@ -210,4 +211,37 @@ export async function actualizarCategoriaAction(id: string, data: { nombre: stri
     if (error.code === 'P2002') return { error: 'Ya existe una categoría con ese nombre' }
     return { error: 'No se pudo actualizar la categoría' }
   }
+}
+
+// ─── Imagen del producto ──────────────────────────────────────────────────────
+/** Sube (o reemplaza) la imagen de un producto. Solo ADMIN. Validación y re-codificación en lib/productos/imagenes.ts. */
+export async function subirImagenProductoAction(productoId: string, formData: FormData) {
+  const sesion = await requerirTenant('ADMIN')
+  const archivo = formData.get('imagen')
+  if (!(archivo instanceof File)) return { error: 'Selecciona una imagen' }
+  const producto = await prisma.producto.findFirst({ where: { id: productoId, tenantId: sesion.tenantId }, select: { id: true, nombre: true, imagen: true } })
+  if (!producto) return { error: 'Producto no encontrado' }
+  try {
+    const nombre = await guardarImagenProducto(sesion.tenantId, producto.id, Buffer.from(await archivo.arrayBuffer()), producto.imagen)
+    await prisma.producto.update({ where: { id: producto.id }, data: { imagen: nombre } })
+    await registrarLog('AUDIT', 'PRODUCTOS', `Imagen actualizada: ${producto.nombre}`, undefined, sesion.tenantId)
+    revalidatePath('/productos')
+    revalidatePath('/pos')
+    return { success: true, imagen: nombre }
+  } catch (error: any) {
+    if (error instanceof ErrorImagen) return { error: error.message }
+    await registrarLog('ERROR', 'PRODUCTOS', `Error subiendo imagen: ${error.message || error}`, undefined, sesion.tenantId)
+    return { error: 'No se pudo guardar la imagen' }
+  }
+}
+
+export async function quitarImagenProductoAction(productoId: string) {
+  const sesion = await requerirTenant('ADMIN')
+  const producto = await prisma.producto.findFirst({ where: { id: productoId, tenantId: sesion.tenantId }, select: { id: true, imagen: true } })
+  if (!producto) return { error: 'Producto no encontrado' }
+  if (producto.imagen) await eliminarArchivo(sesion.tenantId, producto.imagen)
+  await prisma.producto.update({ where: { id: producto.id }, data: { imagen: null } })
+  revalidatePath('/productos')
+  revalidatePath('/pos')
+  return { success: true }
 }

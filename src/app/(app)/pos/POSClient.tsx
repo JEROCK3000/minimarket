@@ -10,10 +10,11 @@ import { imprimirTicket } from '@/lib/print/ticket'
 import { imprimirVentaTermica, SinImpresoraError } from '@/lib/print/termica'
 import { emitirFacturaVentaAction } from '../ventas/sri-actions'
 import { calcularVenta } from '@/lib/ventas/totales'
+import { urlImagenProducto } from '@/lib/productos/url'
 
 interface Prod {
   id: string; nombre: string; codigoBarras: string | null; categoriaNombre: string | null
-  precioVenta: number; ivaPorcentaje: number; stock: number; unidad: string
+  precioVenta: number; ivaPorcentaje: number; stock: number; unidad: string; imagen?: string | null
 }
 interface Cat { id: string; nombre: string; icono: string | null }
 interface ItemCarrito extends Prod { cantidad: number }
@@ -158,8 +159,14 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
                 disabled={agotado}
                 className="card p-3 text-left hover:border-brand-500 hover:shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
+                <div className="aspect-square -mx-1 -mt-1 mb-2 rounded-lg overflow-hidden bg-gray-100 dark:bg-white/5 grid place-items-center">
+                  {p.imagen
+                    ? <img src={urlImagenProducto(p.id, p.imagen)!} alt="" loading="lazy" className="w-full h-full object-cover" />
+                    : <span className="text-3xl font-black text-gray-300 dark:text-gray-600 select-none">{p.nombre.trim().charAt(0).toUpperCase()}</span>}
+                </div>
                 <p className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2 leading-tight">{p.nombre}</p>
-                <p className="text-brand-600 dark:text-brand-400 font-black mt-2">{money(p.precioVenta)}</p>
+                {/* PVP con IVA: lo que paga el cliente (igual que la etiqueta impresa) */}
+                <p className="text-brand-600 dark:text-brand-400 font-black mt-2">{money(p.precioVenta * (1 + p.ivaPorcentaje / 100))}</p>
                 <p className={`text-[11px] mt-0.5 ${agotado ? 'text-red-500' : 'text-gray-400'}`}>
                   {agotado ? 'Agotado' : `Stock: ${p.stock % 1 === 0 ? p.stock : p.stock.toFixed(2)}`}
                 </p>
@@ -187,7 +194,7 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
             <div key={it.id} className="flex items-center gap-2 text-sm">
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-900 dark:text-white truncate">{it.nombre}</p>
-                <p className="text-xs text-gray-400">{money(it.precioVenta)} c/u</p>
+                <p className="text-xs text-gray-400">{money(it.precioVenta)} c/u{it.ivaPorcentaje > 0 ? ` + IVA ${it.ivaPorcentaje}%` : ''}</p>
               </div>
               <div className="flex items-center gap-1">
                 <button onClick={() => cambiarCantidad(it.id, -1)} className="p-1 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"><Minus size={13} /></button>
@@ -458,6 +465,9 @@ function VentaExitosa({ venta, onClose }: { venta: any; onClose: () => void }) {
             <div className="flex justify-between"><span className="text-gray-500">Vuelto</span><span className="font-bold text-green-600">{money(venta.vuelto)}</span></div>
           )}
           <div className="flex justify-between"><span className="text-gray-500">Comprobante</span><span className="font-semibold">{venta.requiereFactura ? (facturaAutorizada ? 'Factura autorizada' : 'Factura') : 'Ticket'}</span></div>
+          {venta.formaPago === 'CREDITO' && (
+            <div className="flex justify-between"><span className="text-gray-500">Fiado (por cobrar)</span><span className="font-bold text-amber-600">{money(venta.total)}</span></div>
+          )}
         </div>
 
         {/* Emisión + impresión en la térmica (vía agente local) */}

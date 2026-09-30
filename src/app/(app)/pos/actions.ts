@@ -143,8 +143,9 @@ export async function registrarVentaAction(data: VentaFormValues) {
         iva,
         total,
         pagoCon: d.pagoCon ?? null,
-        vuelto: d.pagoCon ? Math.max(0, d.pagoCon - total) : null,
+        vuelto: !esFiado && d.pagoCon ? Math.max(0, d.pagoCon - total) : null,
         requiereFactura: d.requiereFactura,
+        formaPago: d.formaPago,
       },
     }
   } catch (error: any) {

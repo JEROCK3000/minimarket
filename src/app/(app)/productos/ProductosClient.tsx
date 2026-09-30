@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import { Plus, Search, Pencil, AlertTriangle, Package, History, Tags, Tag, Loader2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { imprimirEtiquetas } from '@/lib/print/termica'
+import { urlImagenProducto } from '@/lib/productos/url'
 import { ProductoForm } from './ProductoForm'
 import { KardexModal } from './KardexModal'
 import { CategoriasModal } from './CategoriasModal'
@@ -22,6 +23,7 @@ export interface ProductoRow {
   stock: number
   stockMinimo: number
   unidad: string
+  imagen: string | null
   venceEnDias: number | null      // lote en stock más próximo a vencer (≤ 30 días); null = sin aviso
   fechaVencimiento: string | null
 }
@@ -159,8 +161,17 @@ export function ProductosClient({
                   return (
                     <tr key={p.id} className="border-b border-gray-50 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5">
                       <td className="px-4 py-3">
-                        <p className="font-semibold text-gray-900 dark:text-white">{p.nombre}</p>
-                        {p.codigoBarras && <p className="text-xs text-gray-400 font-mono">{p.codigoBarras}</p>}
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-white/5 overflow-hidden grid place-items-center shrink-0">
+                            {p.imagen
+                              ? <img src={urlImagenProducto(p.id, p.imagen)!} alt="" loading="lazy" className="w-full h-full object-cover" />
+                              : <Package size={16} className="text-gray-300 dark:text-gray-600" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 dark:text-white">{p.nombre}</p>
+                            {p.codigoBarras && <p className="text-xs text-gray-400 font-mono">{p.codigoBarras}</p>}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
                         {p.categoriaNombre ? `${p.categoriaIcono ?? ''} ${p.categoriaNombre}` : '—'}

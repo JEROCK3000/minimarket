@@ -208,6 +208,7 @@ export function ticketVenta(d: DatosTicketVenta): Buffer {
   out += bloqueTotales(d.totales) + separador()
   const pago = d.formaPago === 'TARJETA' ? 'TARJETA' : d.formaPago === 'TRANSFERENCIA' ? 'TRANSFERENCIA' : d.formaPago === 'CREDITO' ? 'CREDITO (FIADO)' : 'EFECTIVO'
   out += bloquePago(pago, d.totales.total, d.pagoCon)
+  if (d.formaPago === 'CREDITO') out += NEGRITA_ON + fila('SALDO POR PAGAR', dinero(d.totales.total)) + NEGRITA_OFF + separador()
 
   const leyenda = d.facturaPendiente
     ? 'Su factura electronica se emitira al SRI y se enviara a su correo. Este ticket no es un comprobante tributario.'

@@ -28,6 +28,7 @@ export default async function VentasPage() {
     items: v._count.items,
     total: Number(v.total),
     formaPago: v.formaPago,
+    saldoPendiente: Number(v.saldoPendiente),
     requiereFactura: v.requiereFactura,
     facturaEstado: v.factura?.estado ?? null,
     notaCreditoEstado: v.notaCredito?.estado ?? null,

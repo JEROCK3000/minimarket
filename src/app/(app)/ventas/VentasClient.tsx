@@ -14,7 +14,7 @@ import { imprimirVentaTermica, SinImpresoraError } from '@/lib/print/termica'
 
 interface VentaRow {
   id: string; numero: string; cliente: string; clienteEmail: string; items: number; total: number
-  formaPago: string; requiereFactura: boolean; facturaEstado: string | null
+  formaPago: string; saldoPendiente: number; requiereFactura: boolean; facturaEstado: string | null
   notaCreditoEstado: string | null; estado: string; fecha: string
 }
 
@@ -205,7 +205,14 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                       <td className="px-4 py-3 font-mono font-semibold text-gray-900 dark:text-white">{v.numero}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{fecha(v.fecha)}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{v.cliente}</td>
-                      <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white">{money(v.total)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white">
+                        {money(v.total)}
+                        {v.formaPago === 'CREDITO' && v.estado !== 'ANULADA' && (
+                          <p className={`text-[10px] font-semibold ${v.saldoPendiente > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            Fiado · {v.saldoPendiente > 0 ? `debe ${money(v.saldoPendiente)}` : 'pagado'}
+                          </p>
+                        )}
+                      </td>
                       <td className="px-4 py-3">{badge(v)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">

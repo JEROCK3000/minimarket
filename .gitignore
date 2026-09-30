@@ -33,3 +33,8 @@
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Archivos subidos por los usuarios (firma .p12, logos, imágenes de productos): nunca al repo (AGENTS.md §14.7)
+/storage/sri/
+/storage/logos/
+/storage/productos/

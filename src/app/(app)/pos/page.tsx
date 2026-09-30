@@ -30,6 +30,7 @@ export default async function POSPage() {
     ivaPorcentaje: Number(p.ivaPorcentaje),
     stock: Number(p.stock),
     unidad: p.unidad,
+    imagen: p.imagen,
   }))
 
   return (

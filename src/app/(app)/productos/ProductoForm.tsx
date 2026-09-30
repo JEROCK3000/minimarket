@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Loader2, Save } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { X, Loader2, Save, ImagePlus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { crearProductoAction, actualizarProductoAction } from './actions'
+import { crearProductoAction, actualizarProductoAction, subirImagenProductoAction, quitarImagenProductoAction } from './actions'
+import { urlImagenProducto } from '@/lib/productos/url'
 import type { ProductoRow, CategoriaRow } from './ProductosClient'
 
 export function ProductoForm({
@@ -28,6 +29,18 @@ export function ProductoForm({
     unidad: producto?.unidad ?? 'unidad',
   })
   const [loading, setLoading] = useState(false)
+  // Imagen: archivo nuevo (se sube al guardar) o quitar la actual.
+  const [archivoImagen, setArchivoImagen] = useState<File | null>(null)
+  const [quitarImagen, setQuitarImagen] = useState(false)
+  const [previa, setPrevia] = useState<string | null>(urlImagenProducto(producto?.id ?? '', producto?.imagen))
+  useEffect(() => () => { if (previa?.startsWith('blob:')) URL.revokeObjectURL(previa) }, [previa])
+
+  const elegirImagen = (f: File | null) => {
+    if (!f) return
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) { toast.error('Usa una imagen JPG, PNG o WebP'); return }
+    if (f.size > 3 * 1024 * 1024) { toast.error('La imagen debe pesar menos de 3 MB'); return }
+    setArchivoImagen(f); setQuitarImagen(false); setPrevia(URL.createObjectURL(f))
+  }
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -47,6 +60,16 @@ export function ProductoForm({
         : await crearProductoAction(payload)
 
       if (res.success) {
+        // Imagen después de guardar: al crear se necesita el id del producto nuevo.
+        const id: string | undefined = esEdicion ? producto!.id : (res as { id?: string }).id
+        if (id && archivoImagen) {
+          const fd = new FormData()
+          fd.append('imagen', archivoImagen)
+          const r = await subirImagenProductoAction(id, fd)
+          if ('error' in r) toast.error(`Producto guardado, pero la imagen no: ${r.error}`)
+        } else if (id && quitarImagen && producto?.imagen) {
+          await quitarImagenProductoAction(id)
+        }
         toast.success(esEdicion ? 'Producto actualizado' : 'Producto creado')
         onClose()
       } else {
@@ -75,6 +98,24 @@ export function ProductoForm({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="w-20 h-20 rounded-xl bg-gray-100 dark:bg-white/5 overflow-hidden grid place-items-center shrink-0 border border-gray-200 dark:border-white/10">
+              {previa ? <img src={previa} alt="Imagen del producto" className="w-full h-full object-cover" /> : <ImagePlus size={24} className="text-gray-400" />}
+            </div>
+            <div className="space-y-1.5">
+              <label className="btn-ghost text-xs cursor-pointer inline-flex">
+                <ImagePlus size={14} /> {previa ? 'Cambiar imagen' : 'Agregar imagen'}
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => elegirImagen(e.target.files?.[0] ?? null)} />
+              </label>
+              {previa && (
+                <button type="button" onClick={() => { setArchivoImagen(null); setQuitarImagen(true); setPrevia(null) }} className="btn-ghost text-xs text-red-600 dark:text-red-400 inline-flex ml-1">
+                  <Trash2 size={14} /> Quitar
+                </button>
+              )}
+              <p className="text-[11px] text-gray-400">JPG, PNG o WebP, máx. 3 MB. Se ajusta a 400×400.</p>
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Nombre *</label>
             <input value={form.nombre} onChange={(e) => set('nombre', e.target.value)} className="input" required maxLength={150} />

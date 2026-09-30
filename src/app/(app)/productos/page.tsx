@@ -37,6 +37,7 @@ export default async function ProductosPage() {
     stock: Number(p.stock),
     stockMinimo: Number(p.stockMinimo),
     unidad: p.unidad,
+    imagen: p.imagen,
     venceEnDias: vencePor.get(p.id)?.dias ?? null,
     fechaVencimiento: vencePor.get(p.id)?.fechaVencimiento.toISOString() ?? null,
   }))
