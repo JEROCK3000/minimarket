@@ -263,6 +263,7 @@ model CompraItem {
   cantidad      Decimal  @db.Decimal(10, 3)
   precioUnitario Decimal @db.Decimal(10, 4)
   subtotal      Decimal  @db.Decimal(12, 2)
+  fechaVencimiento DateTime? @db.Date // opcional: vencimiento del lote comprado
 
   @@index([compraId])
   @@map("compra_items")

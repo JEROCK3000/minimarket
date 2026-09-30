@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { crearCompraAction, crearProveedorAction } from './actions'
 import type { ProveedorOpt, ProductoOpt } from './ComprasClient'
 
-interface Linea { productoId: string; cantidad: string; precioUnitario: string }
+interface Linea { productoId: string; cantidad: string; precioUnitario: string; fechaVencimiento: string }
 
 export function CompraForm({
   proveedores, productos, onClose,
@@ -16,7 +16,7 @@ export function CompraForm({
   const [provs, setProvs] = useState(proveedores)
   const [proveedorId, setProveedorId] = useState('')
   const [numFactura, setNumFactura] = useState('')
-  const [lineas, setLineas] = useState<Linea[]>([{ productoId: '', cantidad: '1', precioUnitario: '' }])
+  const [lineas, setLineas] = useState<Linea[]>([{ productoId: '', cantidad: '1', precioUnitario: '', fechaVencimiento: '' }])
   const [loading, setLoading] = useState(false)
   const [nuevoProv, setNuevoProv] = useState('')
 
@@ -35,7 +35,7 @@ export function CompraForm({
       return nueva
     }))
   }
-  const agregarLinea = () => setLineas((ls) => [...ls, { productoId: '', cantidad: '1', precioUnitario: '' }])
+  const agregarLinea = () => setLineas((ls) => [...ls, { productoId: '', cantidad: '1', precioUnitario: '', fechaVencimiento: '' }])
   const quitarLinea = (i: number) => setLineas((ls) => ls.filter((_, idx) => idx !== i))
 
   const crearProveedorRapido = async () => {
@@ -55,7 +55,7 @@ export function CompraForm({
     e.preventDefault()
     const items = lineas
       .filter((l) => l.productoId && Number(l.cantidad) > 0)
-      .map((l) => ({ productoId: l.productoId, cantidad: Number(l.cantidad), precioUnitario: Number(l.precioUnitario) || 0 }))
+      .map((l) => ({ productoId: l.productoId, cantidad: Number(l.cantidad), precioUnitario: Number(l.precioUnitario) || 0, fechaVencimiento: l.fechaVencimiento || undefined }))
     if (items.length === 0) { toast.error('Agrega al menos un producto'); return }
 
     setLoading(true)
@@ -106,16 +106,18 @@ export function CompraForm({
           <div className="space-y-2">
             <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Productos comprados</label>
             {lineas.map((l, i) => (
-              <div key={i} className="flex gap-2 items-start">
-                <select value={l.productoId} onChange={(e) => setLinea(i, 'productoId', e.target.value)} className="input flex-1">
+              <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-start">
+                <select value={l.productoId} onChange={(e) => setLinea(i, 'productoId', e.target.value)} className="input flex-1 min-w-[160px]">
                   <option value="">Producto...</option>
                   {productos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
                 <input type="number" step="0.001" min="0" value={l.cantidad} onChange={(e) => setLinea(i, 'cantidad', e.target.value)} className="input w-20" placeholder="Cant." title="Cantidad" />
                 <input type="number" step="0.0001" min="0" value={l.precioUnitario} onChange={(e) => setLinea(i, 'precioUnitario', e.target.value)} className="input w-24" placeholder="P. compra" title="Precio unitario" />
+                <input type="date" value={l.fechaVencimiento} onChange={(e) => setLinea(i, 'fechaVencimiento', e.target.value)} className="input w-36" title="Fecha de vencimiento (opcional)" aria-label="Fecha de vencimiento" />
                 <button type="button" onClick={() => quitarLinea(i)} className="p-2 text-gray-400 hover:text-red-500 shrink-0" disabled={lineas.length === 1}><Trash2 size={16} /></button>
               </div>
             ))}
+            <p className="text-[11px] text-gray-400">La fecha de vencimiento es opcional: si la indicas, el sistema te avisa cuando el producto esté por vencer.</p>
             <button type="button" onClick={agregarLinea} className="btn-ghost text-xs"><Plus size={14} /> Agregar producto</button>
           </div>
 

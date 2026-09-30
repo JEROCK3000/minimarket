@@ -22,6 +22,8 @@ export interface ProductoRow {
   stock: number
   stockMinimo: number
   unidad: string
+  venceEnDias: number | null      // lote en stock más próximo a vencer (≤ 30 días); null = sin aviso
+  fechaVencimiento: string | null
 }
 export interface CategoriaRow {
   id: string
@@ -45,6 +47,7 @@ export function ProductosClient({
   const [verCategorias, setVerCategorias] = useState(false)
   const [verImportar, setVerImportar] = useState(false)
   const [soloStockBajo, setSoloStockBajo] = useState(false)
+  const [soloPorVencer, setSoloPorVencer] = useState(false)
   const [imprimiendo, setImprimiendo] = useState<string | null>(null)
 
   const etiquetas = async (ids: string[], clave: string) => {
@@ -60,7 +63,7 @@ export function ProductosClient({
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase().trim()
-    const base = soloStockBajo ? productos.filter((p) => p.stock <= p.stockMinimo) : productos
+    const base = productos.filter((p) => (!soloStockBajo || p.stock <= p.stockMinimo) && (!soloPorVencer || p.venceEnDias !== null))
     if (!q) return base
     return base.filter(
       (p) =>
@@ -68,7 +71,7 @@ export function ProductosClient({
         p.codigoBarras?.toLowerCase().includes(q) ||
         p.categoriaNombre?.toLowerCase().includes(q)
     )
-  }, [productos, busqueda, soloStockBajo])
+  }, [productos, busqueda, soloStockBajo, soloPorVencer])
 
   const bajoStock = productos.filter((p) => p.stock <= p.stockMinimo).length
 
@@ -124,6 +127,9 @@ export function ProductosClient({
         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 shrink-0">
           <input type="checkbox" checked={soloStockBajo} onChange={(e) => setSoloStockBajo(e.target.checked)} /> Solo stock bajo
         </label>
+        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 shrink-0">
+          <input type="checkbox" checked={soloPorVencer} onChange={(e) => setSoloPorVencer(e.target.checked)} /> Por vencer ({productos.filter((p) => p.venceEnDias !== null).length})
+        </label>
       </div>
 
       {/* Tabla */}
@@ -165,6 +171,12 @@ export function ProductosClient({
                           {p.stock % 1 === 0 ? p.stock : p.stock.toFixed(3)} {p.unidad}
                         </span>
                         {bajo && <AlertTriangle size={12} className="inline ml-1 text-amber-500" />}
+                        {p.venceEnDias !== null && (
+                          <p className={`text-[10px] font-semibold ${p.venceEnDias < 0 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}
+                            title={`Vencimiento del lote en stock: ${p.fechaVencimiento ? new Date(p.fechaVencimiento).toLocaleDateString('es-EC') : ''}`}>
+                            {p.venceEnDias < 0 ? `Vencido hace ${-p.venceEnDias} d` : p.venceEnDias === 0 ? 'Vence hoy' : `Vence en ${p.venceEnDias} d`}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <button

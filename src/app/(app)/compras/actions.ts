@@ -51,13 +51,14 @@ const compraSchema = z.object({
     productoId: z.string().min(1),
     cantidad: z.coerce.number().positive('Cantidad inválida'),
     precioUnitario: z.coerce.number().min(0),
+    fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha de vencimiento inválida').optional().or(z.literal('')),
   })).min(1, 'Agrega al menos un producto'),
 })
 export interface CompraFormValues {
   proveedorId?: string
   numFactura?: string
   notas?: string
-  items: { productoId: string; cantidad: number; precioUnitario: number }[]
+  items: { productoId: string; cantidad: number; precioUnitario: number; fechaVencimiento?: string }[]
 }
 
 export async function crearCompraAction(data: CompraFormValues) {
@@ -109,6 +110,8 @@ export async function crearCompraAction(data: CompraFormValues) {
               cantidad: it.cantidad,
               precioUnitario: it.precioUnitario,
               subtotal: it.cantidad * it.precioUnitario,
+              // Mediodía UTC: la columna es DATE y así no se corre de día por zona horaria.
+              fechaVencimiento: it.fechaVencimiento ? new Date(`${it.fechaVencimiento}T12:00:00Z`) : null,
             })),
           },
         },
@@ -144,7 +147,7 @@ export interface CompraDetalle {
   motivoAnulacion: string | null
   notas: string | null
   proveedor: { nombre: string; identificacion: string | null; telefono: string | null } | null
-  items: { productoId: string; nombre: string; unidad: string; cantidad: number; precioUnitario: number; subtotal: number; ivaPorcentaje: number }[]
+  items: { productoId: string; nombre: string; unidad: string; cantidad: number; precioUnitario: number; subtotal: number; ivaPorcentaje: number; fechaVencimiento: string | null }[]
   subtotal: number
   iva: number
   total: number
@@ -170,6 +173,7 @@ export async function obtenerCompraAction(id: string): Promise<{ success: true; 
         productoId: it.productoId, nombre: it.producto.nombre, unidad: it.producto.unidad,
         cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), subtotal: Number(it.subtotal),
         ivaPorcentaje: Number(it.producto.ivaPorcentaje),
+        fechaVencimiento: it.fechaVencimiento ? it.fechaVencimiento.toISOString().slice(0, 10) : null,
       })),
       subtotal: Number(c.subtotal), iva: Number(c.iva), total: Number(c.total),
     },

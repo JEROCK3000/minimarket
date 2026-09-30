@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { FileSpreadsheet, FileText, Download, Loader2, Package, Wallet, TrendingUp, Users, Truck, Calculator, Snowflake } from 'lucide-react'
+import { FileSpreadsheet, FileText, Download, Loader2, Package, Wallet, TrendingUp, Users, Truck, Calculator, Snowflake, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 
-type Tipo = 'ventas' | 'gastos' | 'inventario' | 'utilidad' | 'cajeros' | 'compras' | 'cierres' | 'sin-movimiento'
+type Tipo = 'ventas' | 'gastos' | 'inventario' | 'utilidad' | 'cajeros' | 'compras' | 'cierres' | 'sin-movimiento' | 'por-vencer'
 type Formato = 'excel' | 'pdf'
 
 interface DefReporte {
@@ -20,6 +20,7 @@ const REPORTES: DefReporte[] = [
   { tipo: 'gastos', titulo: 'Gastos', desc: 'Gastos por categoría con totales', icon: Wallet, color: 'text-amber-600 bg-amber-50 dark:bg-amber-500/10', rango: true },
   { tipo: 'cierres', titulo: 'Cierres de caja', desc: 'Historial de cierres con arqueo y diferencias', icon: Calculator, color: 'text-rose-600 bg-rose-50 dark:bg-rose-500/10', rango: true, soloAdmin: true },
   { tipo: 'inventario', titulo: 'Inventario y valorización', desc: 'Stock actual y valor del inventario a costo (foto de hoy)', icon: Package, color: 'text-green-600 bg-green-50 dark:bg-green-500/10', rango: false },
+  { tipo: 'por-vencer', titulo: 'Productos por vencer', desc: 'En stock vencidos o que vencen dentro de los días indicados', icon: CalendarClock, color: 'text-orange-600 bg-orange-50 dark:bg-orange-500/10', rango: false, dias: true },
   { tipo: 'sin-movimiento', titulo: 'Productos sin movimiento', desc: 'Con stock y sin ventas en los últimos días (capital inmovilizado)', icon: Snowflake, color: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-500/10', rango: false, dias: true },
 ]
 
@@ -80,10 +81,10 @@ export function ReportesClient({ esAdmin }: { esAdmin: boolean }) {
           </div>
         </div>
         <div className="space-y-1.5 w-40">
-          <label className={lbl} htmlFor="r-dias">Días sin venta</label>
+          <label className={lbl} htmlFor="r-dias">Días (sin venta / por vencer)</label>
           <input id="r-dias" type="number" min={1} max={365} value={dias} onChange={(e) => setDias(e.target.value)} className="input" />
         </div>
-        <p className="text-[11px] text-gray-400 sm:pb-2">El rango aplica a los reportes con fechas; "días sin venta", a productos sin movimiento.</p>
+        <p className="text-[11px] text-gray-400 sm:pb-2">El rango aplica a los reportes con fechas; "días", a productos sin movimiento y por vencer.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

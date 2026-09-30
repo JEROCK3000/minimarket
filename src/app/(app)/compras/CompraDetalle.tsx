@@ -105,6 +105,7 @@ export function CompraDetalle({ compraId, puedeEditar, onClose }: { compraId: st
                     <th className="px-3 py-2 font-semibold text-right">Cantidad</th>
                     <th className="px-3 py-2 font-semibold text-right">Costo unit.</th>
                     <th className="px-3 py-2 font-semibold text-right">IVA</th>
+                    <th className="px-3 py-2 font-semibold">Vence</th>
                     <th className="px-3 py-2 font-semibold text-right">Subtotal</th>
                   </tr>
                 </thead>
@@ -115,6 +116,7 @@ export function CompraDetalle({ compraId, puedeEditar, onClose }: { compraId: st
                       <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-300">{cantidadTxt(it.cantidad)} <span className="text-xs text-gray-400">{it.unidad}</span></td>
                       <td className="px-3 py-2 text-right font-mono text-gray-600 dark:text-gray-300">${it.precioUnitario.toFixed(4)}</td>
                       <td className="px-3 py-2 text-right text-xs text-gray-500">{it.ivaPorcentaje}%</td>
+                      <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{it.fechaVencimiento ? it.fechaVencimiento.split('-').reverse().join('/') : '—'}</td>
                       <td className="px-3 py-2 text-right font-semibold text-gray-900 dark:text-white">{money(it.subtotal)}</td>
                     </tr>
                   ))}
