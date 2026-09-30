@@ -36,7 +36,11 @@ Resumen del día por forma de pago (efectivo/tarjeta/transferencia) y total. **A
 ## 8b. Usuarios (`/usuarios`, solo ADMIN)
 Alta de cajeros y administradores con contraseña temporal (se muestra una vez), edición de nombre y rol, activar/desactivar y restablecer contraseña. Siempre queda al menos un administrador activo.
 
+## 8c. Proveedores (`/proveedores`, solo ADMIN)
+Listado con búsqueda, total comprado y última compra; crear/editar/desactivar; historial de compras; autocompletar por RUC.
+
 ## 9. Reportes (`/reportes`)
+Además de ventas, gastos e inventario: **utilidad por producto**, **ventas por cajero**, **compras**, **cierres de caja** (solo ADMIN) y **productos sin movimiento**.
 Exportación a **Excel** (.xlsx, `exceljs`) y **PDF** (jsPDF + autotable, generador común en `src/lib/reports/pdf-reporte.ts`), vía rutas API en `/api/reportes/*?formato=excel|pdf`:
 - **Ventas** (por rango de fechas): detalle con subtotal, IVA, total y comprobante.
 - **Gastos** (por rango): detalle, totales y resumen por categoría.

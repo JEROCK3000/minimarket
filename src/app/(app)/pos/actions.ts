@@ -103,6 +103,7 @@ export async function registrarVentaAction(data: VentaFormValues) {
               cantidad: it.cantidad,
               precioUnitario: calculo.lineas[i].precioUnitario,
               subtotal: calculo.lineas[i].subtotal,
+              costoUnitario: Number(mapProd.get(it.productoId)!.precioCompra),
             })),
           },
         },
@@ -118,7 +119,7 @@ export async function registrarVentaAction(data: VentaFormValues) {
       return v
     })
 
-    await registrarLog('AUDIT', 'VENTAS', `Venta ${numero} (${total.toFixed(2)}, ${d.requiereFactura ? 'con factura' : 'ticket'})`, undefined, sesion.tenantId)
+    await registrarLog('AUDIT', 'VENTAS', `Venta ${numero} (${total.toFixed(2)}${descuento > 0 ? `, descuento ${descuento.toFixed(2)}` : ''}, ${d.requiereFactura ? 'con factura' : 'ticket'})`, undefined, sesion.tenantId)
     revalidatePath('/pos')
     revalidatePath('/ventas')
     revalidatePath('/productos')

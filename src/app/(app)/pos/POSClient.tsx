@@ -9,6 +9,7 @@ import { obtenerTicketAction } from './ticket-actions'
 import { imprimirTicket } from '@/lib/print/ticket'
 import { imprimirVentaTermica, SinImpresoraError } from '@/lib/print/termica'
 import { emitirFacturaVentaAction } from '../ventas/sri-actions'
+import { calcularVenta } from '@/lib/ventas/totales'
 
 interface Prod {
   id: string; nombre: string; codigoBarras: string | null; categoriaNombre: string | null
@@ -42,16 +43,16 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
     })
   }, [productos, busqueda, catFiltro])
 
-  // Totales
-  const { subtotal, iva, total } = useMemo(() => {
-    let sub = 0, i = 0
-    for (const it of carrito) {
-      const base = it.cantidad * it.precioVenta
-      sub += base
-      i += base * (it.ivaPorcentaje / 100)
-    }
-    return { subtotal: sub, iva: i, total: sub + i }
-  }, [carrito])
+  // Totales: mismo cálculo que el servidor y la factura (lib/ventas/totales.ts)
+  const [descuentoTxt, setDescuentoTxt] = useState('')
+  const [descuentoEnPct, setDescuentoEnPct] = useState(false)
+  const { subtotal, iva, total, descuento } = useMemo(() => {
+    const lineas = carrito.map((it) => ({ cantidad: it.cantidad, precioUnitario: it.precioVenta, ivaPorcentaje: it.ivaPorcentaje }))
+    const bruto = calcularVenta(lineas, 0).subtotal
+    const valor = Math.max(0, Number(descuentoTxt) || 0)
+    const monto = descuentoEnPct ? (bruto * Math.min(valor, 100)) / 100 : Math.min(valor, bruto)
+    return calcularVenta(lineas, monto)
+  }, [carrito, descuentoTxt, descuentoEnPct])
 
   const vuelto = pagoCon ? Math.max(0, Number(pagoCon) - total) : 0
 
@@ -86,6 +87,7 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
 
   const limpiar = () => {
     setCarrito([]); setPagoCon(''); setCliente(null); setRequiereFactura(true); setFormaPago('EFECTIVO')
+    setDescuentoTxt(''); setDescuentoEnPct(false)
   }
 
   const cobrar = async () => {
@@ -100,6 +102,7 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
         formaPago,
         requiereFactura,
         pagoCon: pagoCon ? Number(pagoCon) : undefined,
+        descuento,
         items: carrito.map((it) => ({ productoId: it.id, cantidad: it.cantidad })),
       })
       if (res.success) {
@@ -221,6 +224,21 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
           {/* Totales */}
           <div className="space-y-1 text-sm">
             <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{money(subtotal)}</span></div>
+            {carrito.length > 0 && (
+              <div className="flex items-center justify-between gap-2 text-gray-500">
+                <span>Descuento</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number" step="0.01" min="0" value={descuentoTxt} onChange={(e) => setDescuentoTxt(e.target.value)}
+                    className="input h-7 w-20 text-right text-xs" placeholder="0" aria-label="Descuento"
+                  />
+                  <button type="button" onClick={() => setDescuentoEnPct((v) => !v)} className="h-7 w-8 rounded-lg bg-gray-100 dark:bg-white/5 text-xs font-bold text-gray-600 dark:text-gray-300" title="Cambiar entre $ y %">
+                    {descuentoEnPct ? '%' : '$'}
+                  </button>
+                  {descuento > 0 && <span className="text-red-500 w-16 text-right">−{money(descuento)}</span>}
+                </div>
+              </div>
+            )}
             <div className="flex justify-between text-gray-500"><span>IVA</span><span>{money(iva)}</span></div>
             <div className="flex justify-between text-lg font-black text-gray-900 dark:text-white pt-1"><span>Total</span><span>{money(total)}</span></div>
           </div>

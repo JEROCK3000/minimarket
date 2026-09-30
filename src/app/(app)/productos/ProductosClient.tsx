@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Search, Pencil, AlertTriangle, Package, History } from 'lucide-react'
+import { Plus, Search, Pencil, AlertTriangle, Package, History, Tags } from 'lucide-react'
 import { ProductoForm } from './ProductoForm'
 import { KardexModal } from './KardexModal'
+import { CategoriasModal } from './CategoriasModal'
 
 export interface ProductoRow {
   id: string
@@ -38,17 +39,20 @@ export function ProductosClient({
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editando, setEditando] = useState<ProductoRow | null>(null)
   const [kardexId, setKardexId] = useState<string | null>(null)
+  const [verCategorias, setVerCategorias] = useState(false)
+  const [soloStockBajo, setSoloStockBajo] = useState(false)
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase().trim()
-    if (!q) return productos
-    return productos.filter(
+    const base = soloStockBajo ? productos.filter((p) => p.stock <= p.stockMinimo) : productos
+    if (!q) return base
+    return base.filter(
       (p) =>
         p.nombre.toLowerCase().includes(q) ||
         p.codigoBarras?.toLowerCase().includes(q) ||
         p.categoriaNombre?.toLowerCase().includes(q)
     )
-  }, [productos, busqueda])
+  }, [productos, busqueda, soloStockBajo])
 
   const bajoStock = productos.filter((p) => p.stock <= p.stockMinimo).length
 
@@ -73,14 +77,20 @@ export function ProductosClient({
           </p>
         </div>
         {puedeEditar && (
-          <button onClick={abrirNuevo} className="btn-primary">
-            <Plus size={16} /> Nuevo producto
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setVerCategorias(true)} className="btn-ghost">
+              <Tags size={16} /> Categorías
+            </button>
+            <button onClick={abrirNuevo} className="btn-primary">
+              <Plus size={16} /> Nuevo producto
+            </button>
+          </div>
         )}
       </div>
 
       {/* Búsqueda */}
-      <div className="relative max-w-md">
+      <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+      <div className="relative max-w-md flex-1">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           value={busqueda}
@@ -88,6 +98,10 @@ export function ProductosClient({
           placeholder="Buscar por nombre, código o categoría..."
           className="input pl-9"
         />
+      </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 shrink-0">
+          <input type="checkbox" checked={soloStockBajo} onChange={(e) => setSoloStockBajo(e.target.checked)} /> Solo stock bajo
+        </label>
       </div>
 
       {/* Tabla */}
@@ -158,6 +172,8 @@ export function ProductosClient({
           </div>
         </div>
       )}
+
+      {verCategorias && <CategoriasModal onClose={() => setVerCategorias(false)} />}
 
       {kardexId && (
         <KardexModal productoId={kardexId} puedeEditar={puedeEditar} onClose={() => setKardexId(null)} />

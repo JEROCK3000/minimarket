@@ -342,6 +342,7 @@ model VentaItem {
   cantidad       Decimal  @db.Decimal(10, 3)
   precioUnitario Decimal  @db.Decimal(10, 4)
   subtotal       Decimal  @db.Decimal(12, 2)
+  costoUnitario Decimal? @db.Decimal(10, 4) // precio de compra al vender (utilidad real); NULL en ventas antiguas
 
   @@index([ventaId])
   @@map("venta_items")

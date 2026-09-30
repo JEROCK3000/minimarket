@@ -172,3 +172,42 @@ export async function crearCategoriaAction(nombre: string) {
     return { error: 'No se pudo crear la categoría' }
   }
 }
+
+// ─── Gestión de categorías ────────────────────────────────────────────────────
+export interface CategoriaAdmin { id: string; nombre: string; icono: string | null; activo: boolean; productos: number }
+
+export async function listarCategoriasAction(): Promise<CategoriaAdmin[]> {
+  const sesion = await requerirTenant('ADMIN')
+  const cats = await prisma.categoria.findMany({
+    where: { tenantId: sesion.tenantId },
+    include: { _count: { select: { productos: { where: { activo: true } } } } },
+    orderBy: [{ activo: 'desc' }, { nombre: 'asc' }],
+  })
+  return cats.map((c) => ({ id: c.id, nombre: c.nombre, icono: c.icono, activo: c.activo, productos: c._count.productos }))
+}
+
+const categoriaSchema = z.object({
+  nombre: z.string().trim().min(1, 'El nombre es requerido').max(100),
+  icono: z.string().trim().max(8).optional().or(z.literal('')),
+  activo: z.boolean(),
+})
+
+export async function actualizarCategoriaAction(id: string, data: { nombre: string; icono?: string; activo: boolean }) {
+  const sesion = await requerirTenant('ADMIN')
+  const parsed = categoriaSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
+  const cat = await prisma.categoria.findFirst({ where: { id, tenantId: sesion.tenantId }, select: { id: true } })
+  if (!cat) return { error: 'Categoría no encontrada' }
+  try {
+    await prisma.categoria.update({
+      where: { id },
+      data: { nombre: parsed.data.nombre, icono: parsed.data.icono || null, activo: parsed.data.activo },
+    })
+    await registrarLog('AUDIT', 'PRODUCTOS', `Categoría actualizada: ${parsed.data.nombre}${parsed.data.activo ? '' : ' (desactivada)'}`, undefined, sesion.tenantId)
+    revalidatePath('/productos')
+    return { success: true }
+  } catch (error: any) {
+    if (error.code === 'P2002') return { error: 'Ya existe una categoría con ese nombre' }
+    return { error: 'No se pudo actualizar la categoría' }
+  }
+}

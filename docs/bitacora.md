@@ -214,6 +214,25 @@ evolución, desplegando cada fase. Orden y estado:
   archivo `'use server'` (invocable desde el navegador con cualquier tenantId).
   Movida a `src/lib/caja/estado.ts` (no es server action). Era el único caso.
 
+**Fase 3 (desplegada)**
+- **Proveedores** (`/proveedores`, ADMIN): listado con búsqueda, total comprado,
+  nº de compras y última compra (solo compras ACTIVAS), crear/editar, desactivar
+  (se conserva historial), historial de compras y autocompletar por RUC (apiruc).
+- **Categorías**: gestión desde Productos (renombrar, ícono, activar/desactivar,
+  conteo de productos). Filtro "Solo stock bajo" en Productos.
+- **Descuento en el POS** ($ o %): el POS ahora usa `calcularVenta` (antes su
+  propio cálculo, podía diferir un centavo del servidor). El descuento se prorratea
+  en la factura y queda en el log AUDIT de la venta.
+- **Costo al vender**: `VentaItem.costoUnitario` (precio de compra en el momento).
+  Ventas anteriores: NULL → los reportes usan el costo actual y lo marcan con `*`.
+- **Reportes nuevos** (helper común `src/lib/reports/tabla.ts` + `api/reportes/_comun.ts`):
+  utilidad y margen por producto, ventas por cajero, compras, cierres de caja (ADMIN)
+  y productos sin movimiento (N días). Descargas con el nombre fechado del servidor.
+- **Pendiente, a propósito: devoluciones parciales.** `NotaCredito.ventaId` es
+  `@unique` (una NC por venta) y el flujo SRI/RIDE/Ventas/anulación depende de esa
+  relación 1:1. Hacerlas bien exige varias NC por venta: refactor del flujo
+  tributario que ya funciona → sesión dedicada con pruebas en ambiente de pruebas SRI.
+
 ## Estado
 
 Sistema completo en producción. Pendientes menores: historial de cierres de caja exportable,
