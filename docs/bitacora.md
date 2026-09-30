@@ -194,6 +194,26 @@ evolución, desplegando cada fase. Orden y estado:
   transitiva). `npm audit`: 13 vulnerabilidades preexistentes (Next.js crítica,
   nodemailer, sharp…), ninguna nueva — pendiente actualizar dependencias.
 
+**Fase 2 (desplegada)**
+- **Kardex por producto y ajustes de inventario** (`productos/inventario-actions.ts`,
+  `KardexModal.tsx`): botón de historial en cada producto (todos los roles ven el
+  kardex con saldo). ADMIN: Merma (tipo MERMA), Entrada/Salida (AJUSTE) y Conteo
+  físico (ajusta la diferencia). Motivo obligatorio; nunca deja stock negativo.
+- **Usuarios** (`/usuarios`, solo ADMIN, menú filtrado por rol): crear cajero o
+  administrador con contraseña temporal (`crypto.randomBytes`, bcrypt 12, se
+  muestra una sola vez), editar nombre/rol, activar/desactivar y restablecer
+  contraseña. Reglas: no cambiar el propio rol ni desactivarse; siempre queda al
+  menos un ADMIN activo; el correo es único en todo el sistema (el login busca
+  por correo sin tenant). Nunca se registran contraseñas en logs.
+- **Apertura de caja** (`AperturaCaja`, tabla `aperturas_caja`; `CierreCaja.fondoInicial`):
+  fondo inicial opcional. El período del cierre ahora es desde la apertura abierta,
+  o desde el último cierre, o desde el inicio del día (antes siempre "hoy": dos
+  cierres el mismo día contaban dos veces). Efectivo esperado = fondo + ventas en
+  efectivo − gastos. El cierre cierra la apertura.
+- **Seguridad**: `obtenerResumenCaja(tenantId, …)` estaba exportada desde un
+  archivo `'use server'` (invocable desde el navegador con cualquier tenantId).
+  Movida a `src/lib/caja/estado.ts` (no es server action). Era el único caso.
+
 ## Estado
 
 Sistema completo en producción. Pendientes menores: historial de cierres de caja exportable,

@@ -1,20 +1,27 @@
 'use client'
 
 import { useState } from 'react'
-import { Banknote, CreditCard, ArrowLeftRight, Wallet, Loader2, CheckCircle2, Calculator } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Banknote, CreditCard, ArrowLeftRight, Wallet, Loader2, CheckCircle2, Calculator, DoorOpen } from 'lucide-react'
 import { toast } from 'sonner'
-import { registrarCierreAction } from './actions'
+import { registrarCierreAction, abrirCajaAction } from './actions'
 
 interface Resumen {
   totalVentas: number; ventasEfectivo: number; ventasTarjeta: number; ventasTransfer: number
-  totalVendido: number; gastosEfectivo: number; efectivoEsperado: number
+  totalVendido: number; gastosEfectivo: number; fondoInicial: number; efectivoEsperado: number
 }
+interface Apertura { id: string; usuario: string; fondoInicial: number; abiertaAt: string }
 interface Cierre {
   id: string; fecha: string; usuario: string; totalVendido: number
   efectivoEsperado: number; efectivoContado: number; diferencia: number
 }
 
-export function CajaClient({ resumen, cierres }: { resumen: Resumen; cierres: Cierre[] }) {
+export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
+  resumen: Resumen; desde: string; origenDesde: 'APERTURA' | 'ULTIMO_CIERRE' | 'HOY'; apertura: Apertura | null; cierres: Cierre[]
+}) {
+  const router = useRouter()
+  const [fondo, setFondo] = useState('')
+  const [abriendo, setAbriendo] = useState(false)
   const [contado, setContado] = useState('')
   const [notas, setNotas] = useState('')
   const [loading, setLoading] = useState(false)
@@ -32,9 +39,22 @@ export function CajaClient({ resumen, cierres }: { resumen: Resumen; cierres: Ci
         const d = res.diferencia ?? 0
         toast.success(`Cierre registrado. ${Math.abs(d) < 0.01 ? 'Caja cuadrada ✓' : d > 0 ? `Sobrante ${money(d)}` : `Faltante ${money(Math.abs(d))}`}`)
         setContado(''); setNotas('')
+        router.refresh()
       } else toast.error(res.error || 'No se pudo registrar')
     } finally { setLoading(false) }
   }
+
+  const abrirCaja = async () => {
+    setAbriendo(true)
+    try {
+      const res = await abrirCajaAction({ fondoInicial: Number(fondo || 0) })
+      if ('error' in res) { toast.error(res.error); return }
+      toast.success('Caja abierta')
+      setFondo('')
+      router.refresh()
+    } finally { setAbriendo(false) }
+  }
+  const textoDesde = origenDesde === 'APERTURA' ? 'desde la apertura' : origenDesde === 'ULTIMO_CIERRE' ? 'desde el último cierre' : 'desde el inicio del día'
 
   const tiles = [
     { label: 'Efectivo', valor: resumen.ventasEfectivo, icon: Banknote, color: 'text-green-600 bg-green-50 dark:bg-green-500/10' },
@@ -46,8 +66,31 @@ export function CajaClient({ resumen, cierres }: { resumen: Resumen; cierres: Ci
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-black text-gray-900 dark:text-white">Cierre de Caja</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Resumen del día · {resumen.totalVentas} venta(s)</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Período actual {textoDesde} ({fecha(desde)}) · {resumen.totalVentas} venta(s)
+        </p>
       </div>
+
+      {/* Apertura de caja */}
+      {apertura ? (
+        <div className="card flex flex-wrap items-center gap-3 border-emerald-400/30 bg-emerald-50/40 dark:bg-emerald-500/5">
+          <DoorOpen size={20} className="text-emerald-600" />
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Caja abierta por <strong>{apertura.usuario}</strong> el {fecha(apertura.abiertaAt)} con un fondo de <strong>{money(apertura.fondoInicial)}</strong>.
+          </p>
+        </div>
+      ) : (
+        <div className="card flex flex-col sm:flex-row sm:items-end gap-3">
+          <div className="flex-1">
+            <h3 className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2"><DoorOpen size={16} className="text-brand-600" /> Abrir caja</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Registra el efectivo con el que empiezas (fondo o sencillo) para que el arqueo cuadre. Es opcional.</p>
+          </div>
+          <input type="number" step="0.01" min="0" value={fondo} onChange={(e) => setFondo(e.target.value)} className="input sm:w-40" placeholder="Fondo $0.00" aria-label="Fondo inicial" />
+          <button onClick={abrirCaja} disabled={abriendo} className="btn-primary">
+            {abriendo ? <Loader2 size={16} className="animate-spin" /> : <DoorOpen size={16} />} Abrir caja
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {tiles.map((t) => (
@@ -64,7 +107,10 @@ export function CajaClient({ resumen, cierres }: { resumen: Resumen; cierres: Ci
         <div className="card space-y-4">
           <h3 className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2"><Calculator size={16} className="text-brand-600" /> Arqueo de efectivo</h3>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between text-gray-500"><span>Ventas en efectivo</span><span>{money(resumen.ventasEfectivo)}</span></div>
+            {resumen.fondoInicial > 0 && (
+              <div className="flex justify-between text-gray-500"><span>Fondo inicial</span><span>{money(resumen.fondoInicial)}</span></div>
+            )}
+            <div className="flex justify-between text-gray-500"><span>+ Ventas en efectivo</span><span>{money(resumen.ventasEfectivo)}</span></div>
             <div className="flex justify-between text-gray-500"><span>− Gastos pagados en efectivo</span><span>−{money(resumen.gastosEfectivo)}</span></div>
             <div className="flex justify-between font-bold text-gray-900 dark:text-white border-t border-gray-100 dark:border-white/5 pt-2">
               <span>Efectivo esperado en caja</span><span>{money(resumen.efectivoEsperado)}</span>
@@ -96,7 +142,7 @@ export function CajaClient({ resumen, cierres }: { resumen: Resumen; cierres: Ci
               <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-white/10 grid place-items-center"><Wallet size={20} className="text-gray-600 dark:text-gray-300" /></div>
               <div>
                 <p className="text-2xl font-black text-gray-900 dark:text-white">{money(resumen.totalVendido)}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Total vendido hoy (todas las formas de pago)</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Total vendido en el período (todas las formas de pago)</p>
               </div>
             </div>
           </div>

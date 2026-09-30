@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen flex bg-gray-50 dark:bg-[#070710]">
-      <Sidebar nombreTenant={nombreTenant} />
+      <Sidebar nombreTenant={nombreTenant} rol={sesion.rol} />
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-14 border-b border-gray-100 dark:border-white/5 bg-white/80 dark:bg-[#0a0a16]/80 backdrop-blur sticky top-0 z-20 flex items-center justify-end px-4 gap-4">

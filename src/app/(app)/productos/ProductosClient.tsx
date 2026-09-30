@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Search, Pencil, AlertTriangle, Package } from 'lucide-react'
+import { Plus, Search, Pencil, AlertTriangle, Package, History } from 'lucide-react'
 import { ProductoForm } from './ProductoForm'
+import { KardexModal } from './KardexModal'
 
 export interface ProductoRow {
   id: string
@@ -36,6 +37,7 @@ export function ProductosClient({
   const [busqueda, setBusqueda] = useState('')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editando, setEditando] = useState<ProductoRow | null>(null)
+  const [kardexId, setKardexId] = useState<string | null>(null)
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase().trim()
@@ -106,7 +108,7 @@ export function ProductosClient({
                   <th className="px-4 py-3 font-semibold">Categoría</th>
                   <th className="px-4 py-3 font-semibold text-right">P. Venta</th>
                   <th className="px-4 py-3 font-semibold text-right">Stock</th>
-                  {puedeEditar && <th className="px-4 py-3 font-semibold text-right">Acciones</th>}
+                  <th className="px-4 py-3 font-semibold text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -128,17 +130,26 @@ export function ProductosClient({
                         </span>
                         {bajo && <AlertTriangle size={12} className="inline ml-1 text-amber-500" />}
                       </td>
-                      {puedeEditar && (
-                        <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => setKardexId(p.id)}
+                          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition"
+                          title={puedeEditar ? 'Kardex y ajustes de stock' : 'Kardex (movimientos)'}
+                          aria-label={`Kardex de ${p.nombre}`}
+                        >
+                          <History size={15} />
+                        </button>
+                        {puedeEditar && (
                           <button
                             onClick={() => abrirEditar(p)}
                             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition"
                             title="Editar"
+                            aria-label={`Editar ${p.nombre}`}
                           >
                             <Pencil size={15} />
                           </button>
-                        </td>
-                      )}
+                        )}
+                      </td>
                     </tr>
                   )
                 })}
@@ -146,6 +157,10 @@ export function ProductosClient({
             </table>
           </div>
         </div>
+      )}
+
+      {kardexId && (
+        <KardexModal productoId={kardexId} puedeEditar={puedeEditar} onClose={() => setKardexId(null)} />
       )}
 
       {modalAbierto && (

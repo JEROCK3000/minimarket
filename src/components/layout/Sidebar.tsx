@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, Package, ShoppingCart, Truck, Receipt,
-  Wallet, FileText, Settings, Menu, X, Store, Users, Calculator,
+  Wallet, FileText, Settings, Menu, X, Store, Users, Calculator, UserCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
@@ -19,16 +19,18 @@ const MODULOS = [
   { href: '/gastos', label: 'Gastos', icon: Wallet },
   { href: '/caja', label: 'Cierre de Caja', icon: Calculator },
   { href: '/reportes', label: 'Reportes', icon: FileText },
+  { href: '/usuarios', label: 'Usuarios', icon: UserCog, soloAdmin: true },
   { href: '/configuracion', label: 'Configuración', icon: Settings },
-]
+] as { href: string; label: string; icon: typeof Settings; destacado?: boolean; soloAdmin?: boolean }[]
 
-export function Sidebar({ nombreTenant }: { nombreTenant: string }) {
+export function Sidebar({ nombreTenant, rol }: { nombreTenant: string; rol?: string }) {
+  const esAdmin = rol === 'ADMIN' || rol === 'SUPERADMIN'
   const pathname = usePathname()
   const [abierto, setAbierto] = useState(false)
 
   const nav = (
     <nav className="flex flex-col gap-1">
-      {MODULOS.map((m) => {
+      {MODULOS.filter((m) => !m.soloAdmin || esAdmin).map((m) => {
         const activo = pathname === m.href || pathname.startsWith(m.href + '/')
         return (
           <Link

@@ -377,6 +377,7 @@ model CierreCaja {
   usuarioNombre    String?  @db.VarChar(120)
 
   desde            DateTime // inicio del período del corte
+  fondoInicial     Decimal  @default(0) @db.Decimal(12, 2) // efectivo con el que se abrió la caja
   hasta            DateTime // fin del período (momento del cierre)
   totalVentas      Int      @default(0)
   ventasEfectivo   Decimal  @default(0) @db.Decimal(12, 2)
@@ -392,6 +393,23 @@ model CierreCaja {
 
   @@index([tenantId])
   @@map("cierres_caja")
+}
+
+// Apertura de caja: fondo inicial en efectivo. El cierre siguiente la cierra
+// (cerradaAt) y toma su fecha como inicio del período. Sin relación a Tenant,
+// igual que CierreCaja (se filtra por tenantId en todas las consultas).
+model AperturaCaja {
+  id            String    @id @default(cuid())
+  tenantId      String
+  usuarioId     String?
+  usuarioNombre String?   @db.VarChar(120)
+  fondoInicial  Decimal   @default(0) @db.Decimal(12, 2)
+  notas         String?   @db.VarChar(300)
+  abiertaAt     DateTime  @default(now())
+  cerradaAt     DateTime?
+
+  @@index([tenantId, cerradaAt])
+  @@map("aperturas_caja")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

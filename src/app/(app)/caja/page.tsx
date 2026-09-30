@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { requerirTenant } from '@/lib/auth/tenant'
 import { prisma } from '@/lib/db/prisma'
-import { obtenerResumenCaja } from './actions'
+import { obtenerEstadoCaja } from '@/lib/caja/estado'
 import { CajaClient } from './CajaClient'
 
 export const metadata: Metadata = { title: 'Cierre de Caja' }
@@ -9,9 +9,7 @@ export const metadata: Metadata = { title: 'Cierre de Caja' }
 export default async function CajaPage() {
   const sesion = await requerirTenant()
 
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
-  const ahora = new Date()
-  const resumen = await obtenerResumenCaja(sesion.tenantId, hoy, ahora)
+  const estado = await obtenerEstadoCaja(sesion.tenantId)
 
   const cierres = await prisma.cierreCaja.findMany({
     where: { tenantId: sesion.tenantId },
@@ -28,5 +26,13 @@ export default async function CajaPage() {
     diferencia: Number(c.diferencia),
   }))
 
-  return <CajaClient resumen={resumen} cierres={cierresPlanos} />
+  return (
+    <CajaClient
+      resumen={estado.resumen}
+      desde={estado.desde.toISOString()}
+      origenDesde={estado.origenDesde}
+      apertura={estado.apertura}
+      cierres={cierresPlanos}
+    />
+  )
 }

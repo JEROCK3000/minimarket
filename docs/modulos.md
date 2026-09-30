@@ -9,7 +9,7 @@ KPIs reales del negocio: ventas de hoy, ventas del mes, gastos del mes, balance 
 Interfaz de venta rápida. Catálogo con búsqueda y filtro por categoría; el campo de búsqueda también acepta **escaneo de código de barras** (Enter agrega el producto). Carrito con control de cantidades y validación de stock en vivo. Formas de pago (efectivo/tarjeta/transferencia); en efectivo calcula el **vuelto**. Selector de comprobante: **Factura** (por defecto) o **Solo ticket**. Si es factura, exige cliente (busca local o consulta RUC/cédula, ver §6); los datos del cliente son editables en caliente durante la venta. Al cobrar: descuenta stock, registra kardex y crea la venta en una transacción, con **impresión del comprobante** al terminar (ticket térmico 80mm o A4).
 
 ## 3. Productos e Inventario (`/productos`)
-CRUD de productos con búsqueda. Campos: nombre, código de barras, categoría, precio de compra/venta, IVA, stock, stock mínimo, unidad. Alertas visuales de stock bajo. Todo cambio de stock queda en el **kardex** (`movimientos_inventario`). Crear/editar solo ADMIN; el cajero (USER) solo consulta.
+CRUD de productos con búsqueda. Campos: nombre, código de barras, categoría, precio de compra/venta, IVA (0/5/12/13/14/15%), stock, stock mínimo, unidad. Alertas visuales de stock bajo. Todo cambio de stock queda en el **kardex** (`movimientos_inventario`), visible por producto (botón de historial). **Ajustes de inventario** (ADMIN): merma, entrada/salida y conteo físico, con motivo. Crear/editar solo ADMIN; el cajero (USER) solo consulta.
 
 ## 4. Compras y Proveedores (`/compras`)
 Registro de compras que **actualiza automáticamente el stock y el precio de compra** de cada producto (con kardex tipo COMPRA), en una transacción. Proveedores gestionables (creación rápida desde el formulario de compra). Solo ADMIN.
@@ -29,8 +29,12 @@ CRUD con búsqueda. Validación real del dígito verificador de **cédula y RUC 
 ## 7. Gastos (`/gastos`)
 Registro de gastos por categoría con total del mes. Solo ADMIN.
 
-## 8. Cierre de Caja (`/caja`)
+## 8. Apertura y Cierre de Caja (`/caja`)
+**Apertura** opcional con fondo inicial en efectivo. El período va desde la apertura (o el último cierre, o el inicio del día).
 Resumen del día por forma de pago (efectivo/tarjeta/transferencia) y total. **Arqueo de efectivo**: efectivo esperado (ventas efectivo − gastos) vs. contado físicamente, con cálculo de diferencia (cuadre/sobrante/faltante). Registra el cierre (`cierres_caja`) e historial de cierres recientes.
+
+## 8b. Usuarios (`/usuarios`, solo ADMIN)
+Alta de cajeros y administradores con contraseña temporal (se muestra una vez), edición de nombre y rol, activar/desactivar y restablecer contraseña. Siempre queda al menos un administrador activo.
 
 ## 9. Reportes (`/reportes`)
 Exportación a **Excel** (.xlsx, `exceljs`) y **PDF** (jsPDF + autotable, generador común en `src/lib/reports/pdf-reporte.ts`), vía rutas API en `/api/reportes/*?formato=excel|pdf`:

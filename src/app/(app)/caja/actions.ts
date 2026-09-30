@@ -4,70 +4,84 @@ import { prisma } from '@/lib/db/prisma'
 import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import { obtenerEstadoCaja } from '@/lib/caja/estado'
 
-/** Calcula el resumen de caja de un período (por defecto, el día de hoy). */
-export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: Date) {
-  const [ventas, gastos] = await Promise.all([
-    prisma.venta.findMany({
-      where: { tenantId, estado: 'COMPLETADA', fecha: { gte: desde, lte: hasta } },
-      select: { formaPago: true, total: true },
-    }),
-    prisma.gasto.aggregate({
-      where: { tenantId, fecha: { gte: desde, lte: hasta } },
-      _sum: { monto: true },
-    }),
-  ])
+const aperturaSchema = z.object({
+  fondoInicial: z.coerce.number().min(0, 'El fondo no puede ser negativo').max(100000, 'Monto demasiado alto'),
+  notas: z.string().trim().max(300).optional().or(z.literal('')),
+})
 
-  let efectivo = 0, tarjeta = 0, transfer = 0
-  for (const v of ventas) {
-    const t = Number(v.total)
-    if (v.formaPago === 'EFECTIVO') efectivo += t
-    else if (v.formaPago === 'TARJETA') tarjeta += t
-    else transfer += t
-  }
-  const totalVendido = efectivo + tarjeta + transfer
-  const gastosEfectivo = Number(gastos._sum.monto ?? 0)
-
-  return {
-    totalVentas: ventas.length,
-    ventasEfectivo: efectivo,
-    ventasTarjeta: tarjeta,
-    ventasTransfer: transfer,
-    totalVendido,
-    gastosEfectivo,
-    efectivoEsperado: efectivo - gastosEfectivo,
+/** Abre la caja con un fondo inicial en efectivo. Solo una apertura abierta a la vez. */
+export async function abrirCajaAction(data: { fondoInicial: number; notas?: string }) {
+  const sesion = await requerirTenant()
+  const parsed = aperturaSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
+  try {
+    const creada = await prisma.$transaction(async (tx) => {
+      const abierta = await tx.aperturaCaja.findFirst({ where: { tenantId: sesion.tenantId, cerradaAt: null } })
+      if (abierta) return null
+      return tx.aperturaCaja.create({
+        data: {
+          tenantId: sesion.tenantId, usuarioId: sesion.sub, usuarioNombre: sesion.nombre,
+          fondoInicial: parsed.data.fondoInicial, notas: parsed.data.notas || null,
+        },
+      })
+    })
+    if (!creada) return { error: 'La caja ya está abierta' }
+    await registrarLog('AUDIT', 'CAJA', `Apertura de caja con fondo ${parsed.data.fondoInicial.toFixed(2)}`, undefined, sesion.tenantId)
+    revalidatePath('/caja')
+    return { success: true }
+  } catch (error: any) {
+    await registrarLog('ERROR', 'CAJA', `Error abriendo caja: ${error.message || error}`, undefined, sesion.tenantId)
+    return { error: 'No se pudo abrir la caja' }
   }
 }
 
+const cierreSchema = z.object({
+  efectivoContado: z.coerce.number().min(0, 'El efectivo contado no puede ser negativo').max(1000000),
+  notas: z.string().trim().max(500).optional().or(z.literal('')),
+})
+
 export async function registrarCierreAction(data: { efectivoContado: number; notas?: string }) {
   const sesion = await requerirTenant()
+  const parsed = cierreSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
 
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
   const ahora = new Date()
-  const r = await obtenerResumenCaja(sesion.tenantId, hoy, ahora)
-
-  const contado = Number(data.efectivoContado) || 0
+  const estado = await obtenerEstadoCaja(sesion.tenantId)
+  const r = estado.resumen
+  const contado = parsed.data.efectivoContado
   const diferencia = contado - r.efectivoEsperado
 
   try {
-    await prisma.cierreCaja.create({
-      data: {
-        tenantId: sesion.tenantId,
-        usuarioId: sesion.sub,
-        usuarioNombre: sesion.nombre,
-        desde: hoy,
-        hasta: ahora,
-        totalVentas: r.totalVentas,
-        ventasEfectivo: r.ventasEfectivo,
-        ventasTarjeta: r.ventasTarjeta,
-        ventasTransfer: r.ventasTransfer,
-        totalVendido: r.totalVendido,
-        gastosEfectivo: r.gastosEfectivo,
-        efectivoEsperado: r.efectivoEsperado,
-        efectivoContado: contado,
-        diferencia,
-        notas: data.notas || null,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.cierreCaja.create({
+        data: {
+          tenantId: sesion.tenantId,
+          usuarioId: sesion.sub,
+          usuarioNombre: sesion.nombre,
+          desde: estado.desde,
+          hasta: ahora,
+          fondoInicial: r.fondoInicial,
+          totalVentas: r.totalVentas,
+          ventasEfectivo: r.ventasEfectivo,
+          ventasTarjeta: r.ventasTarjeta,
+          ventasTransfer: r.ventasTransfer,
+          totalVendido: r.totalVendido,
+          gastosEfectivo: r.gastosEfectivo,
+          efectivoEsperado: r.efectivoEsperado,
+          efectivoContado: contado,
+          diferencia,
+          notas: parsed.data.notas || null,
+        },
+      })
+      if (estado.apertura) {
+        await tx.aperturaCaja.updateMany({
+          where: { id: estado.apertura.id, tenantId: sesion.tenantId, cerradaAt: null },
+          data: { cerradaAt: ahora },
+        })
+      }
     })
     await registrarLog('AUDIT', 'CAJA', `Cierre de caja: esperado ${r.efectivoEsperado.toFixed(2)}, contado ${contado.toFixed(2)}, diferencia ${diferencia.toFixed(2)}`, undefined, sesion.tenantId)
     revalidatePath('/caja')
