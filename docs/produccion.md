@@ -52,6 +52,11 @@ El script hace: `git pull` + `npm install` + `prisma db push` (sin `--accept-dat
 
 `minimarket_db` está incluida en el sistema de backups diarios del servidor (3 AM) junto a las otras 3 apps. Ver `../../gablimados/docs/backups.md` para el detalle del sistema (copias locales cifradas + envío por correo con fallback).
 
+**Archivos (desde 2026-09-30).** La base no contiene la firma electrónica, los logos ni las imágenes de productos. Script aparte `/root/backups/backup-archivos-minimarket.sh` (cron **3:15 AM**, no modifica `backup-apps.sh`, que es compartido): `tar.gz` de `storage/sri`, `storage/logos` y `storage/productos` → AES-256 con la misma clave de `/root/backups/.env` en un solo pipe → `/root/backups/store/minimarket_archivos_*.tar.gz.enc` (7 días) + correo con el mismo `mailer.js`. Probado: descifrado idéntico al original. Restaurar:
+`openssl enc -d -aes-256-cbc -pbkdf2 -pass "pass:CLAVE" -in ARCHIVO | tar -C /var/www/minimarket -xzf -`
+
+**Respaldos previos a despliegues**: `/root/backups/pre-deploy/*.sql.gz.enc`, cifrados con la misma clave, retención 30 días (la aplica el script de archivos). Nunca dejar volcados SQL en claro en el servidor.
+
 ## Pasos post-despliegue realizados
 
 1. BD y usuario MySQL creados; `.env` de producción con secretos nuevos.
