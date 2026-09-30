@@ -12,7 +12,7 @@ export async function GET() {
   const wb = new ExcelJS.Workbook()
   const hoja = wb.addWorksheet('Productos')
   hoja.mergeCells('A1:I1')
-  hoja.getCell('A1').value = 'Plantilla de importación de productos — llena desde la fila 4. Obligatorio: Nombre y Precio venta.'
+  hoja.getCell('A1').value = 'Plantilla de importación de productos — BORRA las 2 filas de ejemplo y llena desde la fila 4. Obligatorio: Nombre y Precio venta.'
   hoja.getCell('A1').font = { bold: true, color: { argb: 'FF2563EB' } }
   hoja.mergeCells('A2:I2')
   hoja.getCell('A2').value = 'Precios SIN IVA. IVA: 0 o 15 (también 5). Si una fila tiene un nombre o código ya registrado, se omite (no se modifica nada existente).'

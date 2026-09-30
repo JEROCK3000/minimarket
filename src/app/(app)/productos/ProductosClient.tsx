@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Search, Pencil, AlertTriangle, Package, History, Tags, Tag, Loader2 } from 'lucide-react'
+import { Plus, Search, Pencil, AlertTriangle, Package, History, Tags, Tag, Loader2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { imprimirEtiquetas } from '@/lib/print/termica'
 import { ProductoForm } from './ProductoForm'
 import { KardexModal } from './KardexModal'
 import { CategoriasModal } from './CategoriasModal'
+import { ImportarModal } from './ImportarModal'
 
 export interface ProductoRow {
   id: string
@@ -42,6 +43,7 @@ export function ProductosClient({
   const [editando, setEditando] = useState<ProductoRow | null>(null)
   const [kardexId, setKardexId] = useState<string | null>(null)
   const [verCategorias, setVerCategorias] = useState(false)
+  const [verImportar, setVerImportar] = useState(false)
   const [soloStockBajo, setSoloStockBajo] = useState(false)
   const [imprimiendo, setImprimiendo] = useState<string | null>(null)
 
@@ -91,9 +93,12 @@ export function ProductosClient({
           </p>
         </div>
         {puedeEditar && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button onClick={() => setVerCategorias(true)} className="btn-ghost">
               <Tags size={16} /> Categorías
+            </button>
+            <button onClick={() => setVerImportar(true)} className="btn-ghost" title="Importar productos desde Excel">
+              <Upload size={16} /> Importar
             </button>
             <button onClick={() => etiquetas(filtrados.map((p) => p.id), 'lista')} disabled={!!imprimiendo || filtrados.length === 0} className="btn-ghost" title="Imprimir etiquetas de precio de los productos listados (térmica)">
               {imprimiendo === 'lista' ? <Loader2 size={16} className="animate-spin" /> : <Tag size={16} />} Etiquetas ({filtrados.length})
@@ -200,6 +205,7 @@ export function ProductosClient({
       )}
 
       {verCategorias && <CategoriasModal onClose={() => setVerCategorias(false)} />}
+      {verImportar && <ImportarModal onClose={() => setVerImportar(false)} />}
 
       {kardexId && (
         <KardexModal productoId={kardexId} puedeEditar={puedeEditar} onClose={() => setKardexId(null)} />
