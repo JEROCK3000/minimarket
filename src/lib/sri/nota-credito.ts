@@ -31,13 +31,14 @@ export interface NotaCreditoInput {
     fechaEmisionDocSustento: string // dd/mm/yyyy
     totalSinImpuestos: string
     valorModificacion: string
-    baseImponible: string
-    valorImpuesto: string
+    /** Un totalImpuesto por tarifa de IVA (codigoPorcentaje SRI: '4' = 15%, '0' = 0%, …) */
+    impuestos: { codigoPorcentaje: string; baseImponible: string; valor: string }[]
     motivo: string
   }
   detalles: {
     codigoInterno: string; descripcion: string; cantidad: string
-    precioUnitario: string; precioTotalSinImpuesto: string
+    precioUnitario: string; descuento: string; precioTotalSinImpuesto: string
+    codigoPorcentaje: string; tarifa: string
     baseImponible: string; valorImpuesto: string
   }[]
 }
@@ -58,13 +59,13 @@ export function generarXmlNotaCredito(d: NotaCreditoInput): string {
     `<descripcion>${esc(det.descripcion)}</descripcion>` +
     `<cantidad>${esc(det.cantidad)}</cantidad>` +
     `<precioUnitario>${esc(det.precioUnitario)}</precioUnitario>` +
-    `<descuento>0.00</descuento>` +
+    `<descuento>${esc(det.descuento)}</descuento>` +
     `<precioTotalSinImpuesto>${esc(det.precioTotalSinImpuesto)}</precioTotalSinImpuesto>` +
     `<impuestos>` +
     `<impuesto>` +
     `<codigo>2</codigo>` +
-    `<codigoPorcentaje>4</codigoPorcentaje>` +
-    `<tarifa>15</tarifa>` +
+    `<codigoPorcentaje>${esc(det.codigoPorcentaje)}</codigoPorcentaje>` +
+    `<tarifa>${esc(det.tarifa)}</tarifa>` +
     `<baseImponible>${esc(det.baseImponible)}</baseImponible>` +
     `<valor>${esc(det.valorImpuesto)}</valor>` +
     `</impuesto>` +
@@ -101,12 +102,14 @@ export function generarXmlNotaCredito(d: NotaCreditoInput): string {
     `<valorModificacion>${esc(inc.valorModificacion)}</valorModificacion>` +
     `<moneda>DOLAR</moneda>` +
     `<totalConImpuestos>` +
-    `<totalImpuesto>` +
-    `<codigo>2</codigo>` +
-    `<codigoPorcentaje>4</codigoPorcentaje>` +
-    `<baseImponible>${esc(inc.baseImponible)}</baseImponible>` +
-    `<valor>${esc(inc.valorImpuesto)}</valor>` +
-    `</totalImpuesto>` +
+    inc.impuestos.map((t) =>
+      `<totalImpuesto>` +
+      `<codigo>2</codigo>` +
+      `<codigoPorcentaje>${esc(t.codigoPorcentaje)}</codigoPorcentaje>` +
+      `<baseImponible>${esc(t.baseImponible)}</baseImponible>` +
+      `<valor>${esc(t.valor)}</valor>` +
+      `</totalImpuesto>`
+    ).join('') +
     `</totalConImpuestos>` +
     `<motivo>${esc(inc.motivo)}</motivo>` +
     `</infoNotaCredito>` +

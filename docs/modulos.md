@@ -13,6 +13,7 @@ CRUD de productos con búsqueda. Campos: nombre, código de barras, categoría, 
 
 ## 4. Compras y Proveedores (`/compras`)
 Registro de compras que **actualiza automáticamente el stock y el precio de compra** de cada producto (con kardex tipo COMPRA), en una transacción. Proveedores gestionables (creación rápida desde el formulario de compra). Solo ADMIN.
+Listado con búsqueda (número, proveedor, factura) y filtro por estado. **Detalle** de cada compra (productos, cantidades, costos, IVA, totales) y **anulación** (ADMIN, con motivo): retira del inventario lo que ingresó, con kardex; se bloquea si parte ya se vendió. La compra anulada queda visible con su motivo.
 
 ## 5. Ventas (`/ventas`)
 Historial de ventas con estado del comprobante (Ticket / Sin emitir / Pendiente / Autorizada / Rechazada / Anulada). Acciones sobre cada venta:
@@ -40,6 +41,7 @@ Exportación a **Excel** (.xlsx, `exceljs`) y **PDF** (jsPDF + autotable, genera
 Los PDF llevan encabezado con la empresa, contexto/filtros, fila de totales, fecha de generación y numeración de páginas.
 
 ## 10. Configuración (`/configuracion`, pestañas)
+- **Impresora**: IP de la impresora térmica de red, prueba de impresión, estado y descarga del agente local (`print-agent/`, puerto 9448). Ver `print-agent/README.md`.
 - **Facturación SRI**: datos del emisor, firma `.p12` (contraseña **cifrada** AES-256), token de EcuadorAPI (cifrado). Ambiente pruebas/producción.
 - **Correo**: servidor SMTP (contraseña cifrada) con botón de prueba de conexión.
 - **Seguridad**: cambio de **contraseña** (verifica la actual, indicador de fortaleza) y cambio del **correo de la cuenta** (verifica contraseña, exige unicidad y reemite el JWT de sesión). Con esto se puede reemplazar el correo por defecto usado en desarrollo.

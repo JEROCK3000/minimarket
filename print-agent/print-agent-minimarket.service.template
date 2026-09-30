@@ -1,0 +1,10 @@
+[Unit]
+Description=MiniMarket (Solinteec) - Agente local de impresion termica
+
+[Service]
+ExecStart=__RUTA_PYTHON3__ __RUTA_AGENTE__/print-agent.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

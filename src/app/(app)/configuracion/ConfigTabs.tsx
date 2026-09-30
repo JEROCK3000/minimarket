@@ -2,18 +2,19 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FileText, Mail, KeyRound } from 'lucide-react'
+import { FileText, Mail, KeyRound, Printer } from 'lucide-react'
 
 const TABS = [
   { href: '/configuracion', label: 'Facturación SRI', icon: FileText },
   { href: '/configuracion/correo', label: 'Correo', icon: Mail },
+  { href: '/configuracion/impresora', label: 'Impresora', icon: Printer },
   { href: '/configuracion/seguridad', label: 'Seguridad', icon: KeyRound },
 ]
 
 export function ConfigTabs() {
   const pathname = usePathname()
   return (
-    <div className="flex gap-1 border-b border-gray-100 dark:border-white/5">
+    <div className="flex gap-1 border-b border-gray-100 dark:border-white/5 overflow-x-auto">
       {TABS.map((t) => {
         const activo = pathname === t.href
         return (

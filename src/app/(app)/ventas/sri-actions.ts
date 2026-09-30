@@ -10,6 +10,8 @@ import { signInvoiceXml } from 'ec-sri-invoice-signer'
 import { format } from 'date-fns'
 import { ENDPOINTS_SRI, mapTipoIdentificacion, generarClaveAcceso, envolverFactura } from '@/lib/sri/helpers'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
+import { calcularVenta } from '@/lib/ventas/totales'
+import { codigoPorcentajeIva, formaPagoSri } from '@/lib/sri/impuestos'
 
 /**
  * Emite la factura electrónica de una venta al SRI.
@@ -46,7 +48,14 @@ export async function emitirFacturaVentaAction(ventaId: string) {
     }
     const secuencial = String(maxSeq + 1).padStart(9, '0')
 
-    const subtotalNeto = Number(venta.subtotal) - Number(venta.descuento)
+    // Totales por línea con la tarifa de IVA de cada producto (0%, 15%…),
+    // mismo cálculo que al registrar la venta (ver lib/ventas/totales.ts).
+    const calculo = calcularVenta(
+      venta.items.map((it) => ({
+        cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje),
+      })),
+      Number(venta.descuento),
+    )
 
     const invoiceInput = {
       infoTributaria: {
@@ -71,39 +80,36 @@ export async function emitirFacturaVentaAction(ventaId: string) {
         razonSocialComprador: venta.cliente.nombre,
         identificacionComprador: comprador.identificacion,
         direccionComprador: venta.cliente.direccion || emisor.dirEstablecimiento,
-        totalSinImpuestos: subtotalNeto.toFixed(2),
-        totalDescuento: Number(venta.descuento).toFixed(2),
+        totalSinImpuestos: calculo.base.toFixed(2),
+        totalDescuento: calculo.descuento.toFixed(2),
         totalConImpuestos: {
-          totalImpuesto: [{
+          totalImpuesto: calculo.porTarifa.map((t) => ({
             codigo: '2' as const,
-            codigoPorcentaje: '4' as any,
+            codigoPorcentaje: codigoPorcentajeIva(t.tarifa) as any,
             descuentoAdicional: '0.00',
-            baseImponible: subtotalNeto.toFixed(2),
-            tarifa: '15.00',
-            valor: Number(venta.iva).toFixed(2),
-          }],
+            baseImponible: t.base.toFixed(2),
+            tarifa: t.tarifa.toFixed(2),
+            valor: t.iva.toFixed(2),
+          })),
         },
-        importeTotal: Number(venta.total).toFixed(2),
+        importeTotal: calculo.total.toFixed(2),
         moneda: 'DOLAR',
-        pagos: { pago: [{ formaPago: '01', total: Number(venta.total).toFixed(2), plazo: '0', unidadTiempo: 'dias' }] },
+        pagos: { pago: [{ formaPago: formaPagoSri(venta.formaPago), total: calculo.total.toFixed(2), plazo: '0', unidadTiempo: 'dias' }] },
       },
       detalles: {
-        detalle: venta.items.map((item) => {
-          const sub = Number(item.subtotal)
-          const factorDesc = Number(venta.subtotal) > 0 ? Number(venta.descuento) / Number(venta.subtotal) : 0
-          const descItem = sub * factorDesc
-          const base = sub - descItem
+        detalle: venta.items.map((item, i) => {
+          const l = calculo.lineas[i]
           return {
             codigoPrincipal: item.productoId.substring(0, 25),
             descripcion: item.producto.nombre,
             cantidad: String(item.cantidad),
             precioUnitario: Number(item.precioUnitario).toFixed(4),
-            descuento: descItem.toFixed(2),
-            precioTotalSinImpuesto: base.toFixed(2),
+            descuento: l.descuento.toFixed(2),
+            precioTotalSinImpuesto: l.base.toFixed(2),
             impuestos: {
               impuesto: [{
-                codigo: '2', codigoPorcentaje: '4', tarifa: '15',
-                baseImponible: base.toFixed(2), valor: (base * 0.15).toFixed(2),
+                codigo: '2', codigoPorcentaje: codigoPorcentajeIva(l.ivaPorcentaje), tarifa: String(l.ivaPorcentaje),
+                baseImponible: l.base.toFixed(2), valor: l.iva.toFixed(2),
               }],
             },
           }

@@ -7,6 +7,8 @@ import { registrarVentaAction, crearClienteRapidoAction, actualizarClienteRapido
 import { IdentificacionInput, type ClienteEncontrado, type ClienteRegistrado } from '@/components/forms/IdentificacionInput'
 import { obtenerTicketAction } from './ticket-actions'
 import { imprimirTicket } from '@/lib/print/ticket'
+import { imprimirVentaTermica, SinImpresoraError } from '@/lib/print/termica'
+import { emitirFacturaVentaAction } from '../ventas/sri-actions'
 
 interface Prod {
   id: string; nombre: string; codigoBarras: string | null; categoriaNombre: string | null
@@ -378,13 +380,44 @@ function ClienteModal({ onClose, onSelect }: { onClose: () => void; onSelect: (c
 function VentaExitosa({ venta, onClose }: { venta: any; onClose: () => void }) {
   const money = (n: number) => `$${n.toFixed(2)}`
   const [imprimiendo, setImprimiendo] = useState<string | null>(null)
+  const [facturaAutorizada, setFacturaAutorizada] = useState(false)
+
+  // Respaldo: ventana de impresión del navegador (sin corte automático).
+  const imprimirNavegador = async (formato: 'termico' | 'a4') => {
+    const res = await obtenerTicketAction(venta.id)
+    if ('ticket' in res) imprimirTicket(res.ticket, formato)
+    else toast.error(res.error || 'No se pudo generar el comprobante')
+  }
 
   const imprimir = async (formato: 'termico' | 'a4') => {
     setImprimiendo(formato)
+    try { await imprimirNavegador(formato) } finally { setImprimiendo(null) }
+  }
+
+  /** Impresora térmica vía agente local; si no hay impresora o falla, por el navegador. */
+  const imprimirTermica = async () => {
     try {
-      const res = await obtenerTicketAction(venta.id)
-      if ('ticket' in res) imprimirTicket(res.ticket, formato)
-      else toast.error(res.error || 'No se pudo generar el comprobante')
+      const tipo = await imprimirVentaTermica(venta.id)
+      toast.success(tipo === 'FACTURA' ? 'Factura enviada a la impresora' : 'Ticket enviado a la impresora')
+    } catch (err: any) {
+      if (!(err instanceof SinImpresoraError)) toast.error(err.message || 'No se pudo imprimir en la térmica')
+      await imprimirNavegador('termico')
+    }
+  }
+
+  const botonTermica = async () => {
+    setImprimiendo('agente')
+    try { await imprimirTermica() } finally { setImprimiendo(null) }
+  }
+
+  const emitirEImprimir = async () => {
+    setImprimiendo('emitir')
+    try {
+      const r: any = await emitirFacturaVentaAction(venta.id)
+      if (r?.error) { toast.error(r.error); return }
+      setFacturaAutorizada(true)
+      toast.success('Factura autorizada por el SRI')
+      await imprimirTermica()
     } finally { setImprimiendo(null) }
   }
 
@@ -399,21 +432,33 @@ function VentaExitosa({ venta, onClose }: { venta: any; onClose: () => void }) {
           {venta.vuelto != null && venta.vuelto > 0 && (
             <div className="flex justify-between"><span className="text-gray-500">Vuelto</span><span className="font-bold text-green-600">{money(venta.vuelto)}</span></div>
           )}
-          <div className="flex justify-between"><span className="text-gray-500">Comprobante</span><span className="font-semibold">{venta.requiereFactura ? 'Factura' : 'Ticket'}</span></div>
+          <div className="flex justify-between"><span className="text-gray-500">Comprobante</span><span className="font-semibold">{venta.requiereFactura ? (facturaAutorizada ? 'Factura autorizada' : 'Factura') : 'Ticket'}</span></div>
         </div>
 
-        {/* Impresión del comprobante */}
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          <button onClick={() => imprimir('termico')} disabled={!!imprimiendo} className="btn-ghost text-xs h-9">
-            {imprimiendo === 'termico' ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Ticket
+        {/* Emisión + impresión en la térmica (vía agente local) */}
+        {venta.requiereFactura && !facturaAutorizada && (
+          <button onClick={emitirEImprimir} disabled={!!imprimiendo} className="btn-primary w-full mb-2">
+            {imprimiendo === 'emitir' ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+            {imprimiendo === 'emitir' ? 'Emitiendo al SRI…' : 'Emitir factura e imprimir'}
           </button>
-          <button onClick={() => imprimir('a4')} disabled={!!imprimiendo} className="btn-ghost text-xs h-9">
+        )}
+        <button onClick={botonTermica} disabled={!!imprimiendo} className="btn-ghost w-full mb-2 h-9 text-sm">
+          {imprimiendo === 'agente' ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+          {venta.requiereFactura && !facturaAutorizada ? 'Imprimir ticket (sin factura)' : 'Imprimir en térmica'}
+        </button>
+
+        {/* Impresión por el navegador */}
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <button onClick={() => imprimir('termico')} disabled={!!imprimiendo} className="btn-ghost text-xs h-8" title="Ventana de impresión del navegador, formato 80 mm">
+            {imprimiendo === 'termico' ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Navegador
+          </button>
+          <button onClick={() => imprimir('a4')} disabled={!!imprimiendo} className="btn-ghost text-xs h-8">
             {imprimiendo === 'a4' ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} A4
           </button>
         </div>
 
-        {venta.requiereFactura && (
-          <p className="text-[11px] text-gray-400 mb-3">La factura electrónica se emitirá al SRI desde el módulo de Ventas.</p>
+        {venta.requiereFactura && !facturaAutorizada && (
+          <p className="text-[11px] text-gray-400 mb-3">También puedes emitir la factura más tarde desde el módulo de Ventas.</p>
         )}
         <button onClick={onClose} className="btn-primary w-full">Nueva venta</button>
       </div>

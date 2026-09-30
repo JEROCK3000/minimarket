@@ -5,6 +5,8 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { calcularVenta } from '@/lib/ventas/totales'
+import { moverStock } from '@/lib/inventario/movimientos'
 
 const ventaSchema = z.object({
   clienteId: z.string().optional().or(z.literal('')),
@@ -65,17 +67,16 @@ export async function registrarVentaAction(data: VentaFormValues) {
       : null
     if (d.clienteId && !comprador) return { error: 'Cliente no encontrado' }
 
-    // Totales (IVA incluido por producto)
-    let subtotal = 0
-    let iva = 0
-    for (const it of d.items) {
-      const prod = mapProd.get(it.productoId)!
-      const base = it.cantidad * Number(prod.precioVenta)
-      subtotal += base
-      iva += base * (Number(prod.ivaPorcentaje) / 100)
-    }
-    const descuento = d.descuento || 0
-    const total = subtotal - descuento + iva
+    // Totales con el cálculo único (IVA por tarifa de cada producto, sobre la
+    // base con descuento): los mismos que usará la factura electrónica.
+    const calculo = calcularVenta(
+      d.items.map((it) => {
+        const prod = mapProd.get(it.productoId)!
+        return { cantidad: it.cantidad, precioUnitario: Number(prod.precioVenta), ivaPorcentaje: Number(prod.ivaPorcentaje) }
+      }),
+      d.descuento || 0,
+    )
+    const { subtotal, descuento, iva, total } = calculo
 
     const count = await prisma.venta.count({ where: { tenantId: sesion.tenantId } })
     const numero = `VEN-${String(count + 1).padStart(6, '0')}`
@@ -97,35 +98,21 @@ export async function registrarVentaAction(data: VentaFormValues) {
           pagoCon: d.pagoCon ?? null,
           requiereFactura: d.requiereFactura,
           items: {
-            create: d.items.map((it) => {
-              const prod = mapProd.get(it.productoId)!
-              return {
-                productoId: it.productoId,
-                cantidad: it.cantidad,
-                precioUnitario: Number(prod.precioVenta),
-                subtotal: it.cantidad * Number(prod.precioVenta),
-              }
-            }),
+            create: d.items.map((it, i) => ({
+              productoId: it.productoId,
+              cantidad: it.cantidad,
+              precioUnitario: calculo.lineas[i].precioUnitario,
+              subtotal: calculo.lineas[i].subtotal,
+            })),
           },
         },
       })
 
-      // Descontar stock + kardex
+      // Descontar stock + kardex (atómico)
       for (const it of d.items) {
-        const prod = mapProd.get(it.productoId)!
-        const stockPrevio = Number(prod.stock)
-        const stockNuevo = stockPrevio - it.cantidad
-        await tx.producto.update({ where: { id: it.productoId }, data: { stock: stockNuevo } })
-        await tx.movimientoInventario.create({
-          data: {
-            tenantId: sesion.tenantId,
-            productoId: it.productoId,
-            tipo: 'VENTA',
-            cantidad: -it.cantidad,
-            stockPrevio,
-            stockNuevo,
-            motivo: `Venta ${numero}`,
-          },
+        await moverStock(tx, {
+          tenantId: sesion.tenantId, productoId: it.productoId,
+          cantidad: -it.cantidad, tipo: 'VENTA', motivo: `Venta ${numero}`,
         })
       }
       return v

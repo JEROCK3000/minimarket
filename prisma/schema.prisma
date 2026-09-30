@@ -241,6 +241,9 @@ model Compra {
   iva         Decimal   @default(0) @db.Decimal(12, 2)
   total       Decimal   @default(0) @db.Decimal(12, 2)
   notas       String?   @db.Text
+  estado      String    @default("ACTIVA") @db.VarChar(10) // ACTIVA | ANULADA
+  anuladaAt   DateTime?
+  motivoAnulacion String? @db.VarChar(300)
   fecha       DateTime  @default(now())
   createdAt   DateTime  @default(now())
 

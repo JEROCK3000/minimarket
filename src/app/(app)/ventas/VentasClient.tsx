@@ -10,6 +10,7 @@ import { obtenerVistaPreviaFacturaAction } from './preview-actions'
 import { emitirNotaCreditoAction } from './nc-actions'
 import { obtenerTicketAction } from '../pos/ticket-actions'
 import { imprimirTicket } from '@/lib/print/ticket'
+import { imprimirVentaTermica, SinImpresoraError } from '@/lib/print/termica'
 
 interface VentaRow {
   id: string; numero: string; cliente: string; clienteEmail: string; items: number; total: number
@@ -82,6 +83,17 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
   const reimprimir = async (id: string, formato: 'termico' | 'a4') => {
     setAccion(id + '-print')
     try {
+      // Térmico: primero la impresora térmica vía agente local (con corte automático).
+      if (formato === 'termico') {
+        try {
+          const tipo = await imprimirVentaTermica(id)
+          toast.success(tipo === 'FACTURA' ? 'Factura enviada a la impresora' : 'Ticket enviado a la impresora')
+          return
+        } catch (err: any) {
+          // Sin impresora configurada: se usa el navegador sin avisar; otro error sí se avisa.
+          if (!(err instanceof SinImpresoraError)) toast.error(`${err.message || 'No se pudo imprimir en la térmica'}. Se abrirá la impresión del navegador.`)
+        }
+      }
       const res = await obtenerTicketAction(id)
       if ('ticket' in res) imprimirTicket(res.ticket, formato)
       else toast.error(res.error || 'No se pudo generar el comprobante')

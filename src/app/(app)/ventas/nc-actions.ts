@@ -11,6 +11,8 @@ import { format } from 'date-fns'
 import { ENDPOINTS_SRI, mapTipoIdentificacion, generarClaveAcceso } from '@/lib/sri/helpers'
 import { generarXmlNotaCredito } from '@/lib/sri/nota-credito'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
+import { calcularVenta } from '@/lib/ventas/totales'
+import { codigoPorcentajeIva } from '@/lib/sri/impuestos'
 
 /**
  * Emite una Nota de Crédito que anula por completo una factura autorizada.
@@ -57,9 +59,14 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
     }
     const secuencial = String(maxSeq + 1).padStart(9, '0')
 
-    const subtotal = Number(venta.subtotal) - Number(venta.descuento)
-    const iva = Number(venta.iva)
-    const total = Number(venta.total)
+    // Mismo cálculo que la factura original (tarifa de IVA por producto).
+    const calculo = calcularVenta(
+      venta.items.map((it) => ({
+        cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje),
+      })),
+      Number(venta.descuento),
+    )
+    const total = calculo.total
 
     const accessKey = generarClaveAcceso({
       fecha: format(new Date(), 'ddMMyyyy'),
@@ -88,22 +95,26 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
         codDocModificado: '01',
         numDocModificado,
         fechaEmisionDocSustento: fechaFactura,
-        totalSinImpuestos: subtotal.toFixed(2),
-        valorModificacion: total.toFixed(2),
-        baseImponible: subtotal.toFixed(2),
-        valorImpuesto: iva.toFixed(2),
+        totalSinImpuestos: calculo.base.toFixed(2),
+        valorModificacion: calculo.total.toFixed(2),
+        impuestos: calculo.porTarifa.map((t) => ({
+          codigoPorcentaje: codigoPorcentajeIva(t.tarifa), baseImponible: t.base.toFixed(2), valor: t.iva.toFixed(2),
+        })),
         motivo: motivoLimpio,
       },
-      detalles: venta.items.map((it) => {
-        const base = Number(it.subtotal)
+      detalles: venta.items.map((it, i) => {
+        const l = calculo.lineas[i]
         return {
           codigoInterno: it.productoId.slice(-6),
           descripcion: it.producto.nombre,
           cantidad: String(Number(it.cantidad)),
           precioUnitario: Number(it.precioUnitario).toFixed(4),
-          precioTotalSinImpuesto: base.toFixed(2),
-          baseImponible: base.toFixed(2),
-          valorImpuesto: (base * (Number(it.producto.ivaPorcentaje) / 100)).toFixed(2),
+          descuento: l.descuento.toFixed(2),
+          precioTotalSinImpuesto: l.base.toFixed(2),
+          codigoPorcentaje: codigoPorcentajeIva(l.ivaPorcentaje),
+          tarifa: String(l.ivaPorcentaje),
+          baseImponible: l.base.toFixed(2),
+          valorImpuesto: l.iva.toFixed(2),
         }
       }),
     })

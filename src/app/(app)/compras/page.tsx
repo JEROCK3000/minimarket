@@ -34,6 +34,7 @@ export default async function ComprasPage() {
     items: c._count.items,
     total: Number(c.total),
     fecha: c.fecha.toISOString(),
+    estado: c.estado,
   }))
   const productosPlanos = productos.map((p) => ({
     id: p.id, nombre: p.nombre, precioCompra: Number(p.precioCompra), stock: Number(p.stock), unidad: p.unidad,

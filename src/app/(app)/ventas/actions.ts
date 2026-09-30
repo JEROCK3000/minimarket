@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db/prisma'
 import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
+import { moverStock } from '@/lib/inventario/movimientos'
 
 /**
  * Anula una venta y REVIERTE el stock (devuelve la mercadería al inventario),
@@ -27,26 +28,20 @@ export async function anularVentaAction(ventaId: string) {
     }
 
     await prisma.$transaction(async (tx) => {
-      // Revertir stock de cada item
+      // Marcar primero, condicionado a que siga activa: si dos anulaciones
+      // llegan a la vez, solo una revierte el stock.
+      const marcada = await tx.venta.updateMany({
+        where: { id: ventaId, tenantId: sesion.tenantId, estado: { not: 'ANULADA' } },
+        data: { estado: 'ANULADA' },
+      })
+      if (marcada.count === 0) throw new Error('La venta ya está anulada')
+      // Revertir stock de cada item (+ entra de vuelta)
       for (const it of venta.items) {
-        const prod = await tx.producto.findUnique({ where: { id: it.productoId } })
-        if (!prod) continue
-        const stockPrevio = Number(prod.stock)
-        const stockNuevo = stockPrevio + Number(it.cantidad)
-        await tx.producto.update({ where: { id: it.productoId }, data: { stock: stockNuevo } })
-        await tx.movimientoInventario.create({
-          data: {
-            tenantId: sesion.tenantId,
-            productoId: it.productoId,
-            tipo: 'AJUSTE',
-            cantidad: Number(it.cantidad), // + entra de vuelta
-            stockPrevio,
-            stockNuevo,
-            motivo: `Anulación venta ${venta.numero}`,
-          },
+        await moverStock(tx, {
+          tenantId: sesion.tenantId, productoId: it.productoId,
+          cantidad: Number(it.cantidad), tipo: 'AJUSTE', motivo: `Anulación venta ${venta.numero}`,
         })
       }
-      await tx.venta.update({ where: { id: ventaId }, data: { estado: 'ANULADA' } })
     })
 
     await registrarLog('AUDIT', 'VENTAS', `Venta ANULADA: ${venta.numero} (stock revertido)`, undefined, sesion.tenantId)

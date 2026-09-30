@@ -152,6 +152,48 @@ sin decir si es cédula o RUC; ahora se escribe solo el número y se detecta.
   001/0001). Rechazaba RUCs reales de S.A.S. (p. ej. `1793212860001`); mismo
   criterio que apiruc (`docs/ruc.md`). Persona natural sigue validando la cédula.
 
+## Sesión 2026-09-30 (cont.) — Fase 1: impuestos SRI, compras e impresión térmica
+
+Plan acordado con el dueño (análisis completo en esta sesión): Fase 1 → 2 → 3 →
+evolución, desplegando cada fase. Orden y estado:
+
+**Fase 1 (desplegada)**
+- **IVA por tarifa real en SRI** (error tributario): la factura y la NC enviaban
+  TODO con `codigoPorcentaje 4` (15%) aunque el producto fuera 0%. Ahora cada
+  línea usa la tarifa de su producto y `totalConImpuestos` se agrupa por tarifa.
+  Cálculo único en `src/lib/ventas/totales.ts` (`calcularVenta`): subtotal por
+  línea redondeado, descuento global prorrateado (la última línea absorbe el
+  residuo), IVA por línea sobre la base con descuento. Lo usan registrar venta,
+  factura (`sri-actions`), NC (`nc-actions` + `lib/sri/nota-credito.ts`), ticket.
+  Códigos SRI en `src/lib/sri/impuestos.ts`. Productos: solo tarifas 0/5/12/13/14/15.
+- **Forma de pago SRI** (error tributario): siempre iba `01`. Ahora EFECTIVO→01,
+  TARJETA→19 (crédito; el POS no distingue débito), TRANSFERENCIA→20.
+- **Stock atómico** (`src/lib/inventario/movimientos.ts`, `moverStock`): venta,
+  compra y anulaciones usan increment/decrement en BD y derivan el kardex del
+  resultado. Antes se leía el stock fuera de la transacción: ventas simultáneas
+  del mismo producto se pisaban. Anular venta/compra marca primero con
+  `updateMany` condicionado: dos anulaciones simultáneas no revierten dos veces.
+- **Compras: detalle y anulación**. `Compra.estado` (ACTIVA/ANULADA),
+  `anuladaAt`, `motivoAnulacion` (db push, columnas nuevas). Listado con búsqueda
+  y filtro; modal `CompraDetalle` (productos, costos, IVA, totales). Anular (ADMIN,
+  motivo obligatorio) retira del stock lo que ingresó (kardex AJUSTE); se bloquea
+  si el stock quedaría negativo. El precio de compra no se revierte.
+- **Impresión térmica** (copia adaptada del agente de ecofacturacion, sin tocar el
+  original): `print-agent/` propio, **puerto 9448**, tarea Windows
+  `print-agent-minimarket`, LaunchAgent `com.solinteec.print-agent-minimarket`,
+  servicio `print-agent-minimarket.service`. Bytes ESC/POS generados en servidor
+  (`src/lib/print/escpos.ts`, CP850, 42 col, corte total) por
+  `pos/print-actions.ts`: RIDE si la factura está AUTORIZADA, ticket de venta no
+  fiscal si no. Navegador → `https://127.0.0.1:9448/imprimir` (`lib/print/termica.ts`).
+  Configuración → Impresora: IP (config `impresora_termica_ip`), probar impresión,
+  estado del agente y descarga del agente en .zip (`/api/print-agent`, solo ADMIN,
+  lista blanca de archivos, nunca `*.pem`). POS: "Emitir factura e imprimir" e
+  "Imprimir en térmica"; Ventas: el botón de impresión usa la térmica. Sin
+  impresora o si el agente falla → impresión por navegador como antes.
+- Dependencia `fflate` declarada explícitamente (ya estaba instalada como
+  transitiva). `npm audit`: 13 vulnerabilidades preexistentes (Next.js crítica,
+  nodemailer, sharp…), ninguna nueva — pendiente actualizar dependencias.
+
 ## Estado
 
 Sistema completo en producción. Pendientes menores: historial de cierres de caja exportable,

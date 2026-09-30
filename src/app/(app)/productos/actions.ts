@@ -12,7 +12,8 @@ const productoSchema = z.object({
   categoriaId: z.string().trim().optional().or(z.literal('')),
   precioCompra: z.coerce.number().min(0, 'No puede ser negativo').max(999999),
   precioVenta: z.coerce.number().min(0, 'No puede ser negativo').max(999999),
-  ivaPorcentaje: z.coerce.number().min(0).max(100),
+  // Solo tarifas que el SRI acepta (ver lib/sri/impuestos.ts)
+  ivaPorcentaje: z.coerce.number().refine((v) => [0, 5, 12, 13, 14, 15].includes(v), 'Tarifa de IVA no válida para el SRI'),
   stock: z.coerce.number().min(0).max(9999999),
   stockMinimo: z.coerce.number().min(0).max(9999999),
   unidad: z.string().trim().max(20).default('unidad'),
