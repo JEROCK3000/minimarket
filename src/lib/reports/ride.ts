@@ -22,8 +22,10 @@ export interface RideData {
 const MORADO: [number, number, number] = [124, 77, 158]
 
 function formaPagoTexto(fp: string): string {
-  if (fp === 'TARJETA') return 'TARJETA DE DÉBITO/CRÉDITO'
+  // Mismo código que se declara en el XML (lib/sri/impuestos.ts → formaPagoSri).
+  if (fp === 'TARJETA') return 'TARJETA DE CRÉDITO'
   if (fp === 'TRANSFERENCIA') return 'OTROS CON UTILIZACIÓN DEL SISTEMA FINANCIERO'
+  if (fp === 'CREDITO') return 'SIN UTILIZACIÓN DEL SISTEMA FINANCIERO (CRÉDITO)'
   return 'SIN UTILIZACIÓN DEL SISTEMA FINANCIERO'
 }
 

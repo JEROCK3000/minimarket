@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { FileSpreadsheet, FileText, Download, Loader2, Package, Wallet, TrendingUp, Users, Truck, Calculator, Snowflake, CalendarClock } from 'lucide-react'
+import { FileSpreadsheet, FileText, Download, Loader2, Package, Wallet, TrendingUp, Users, Truck, Calculator, Snowflake, CalendarClock, HandCoins } from 'lucide-react'
 import { toast } from 'sonner'
 
-type Tipo = 'ventas' | 'gastos' | 'inventario' | 'utilidad' | 'cajeros' | 'compras' | 'cierres' | 'sin-movimiento' | 'por-vencer'
+type Tipo = 'ventas' | 'gastos' | 'inventario' | 'utilidad' | 'cajeros' | 'compras' | 'cierres' | 'sin-movimiento' | 'por-vencer' | 'cartera'
 type Formato = 'excel' | 'pdf'
 
 interface DefReporte {
@@ -17,6 +17,7 @@ const REPORTES: DefReporte[] = [
   { tipo: 'utilidad', titulo: 'Utilidad por producto', desc: 'Venta neta, costo, utilidad y margen de cada producto', icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10', rango: true, soloAdmin: true },
   { tipo: 'cajeros', titulo: 'Ventas por cajero', desc: 'Ventas, ticket promedio, descuentos y anulaciones por usuario', icon: Users, color: 'text-purple-600 bg-purple-50 dark:bg-purple-500/10', rango: true, soloAdmin: true },
   { tipo: 'compras', titulo: 'Compras', desc: 'Compras del período por proveedor (anuladas no suman)', icon: Truck, color: 'text-sky-600 bg-sky-50 dark:bg-sky-500/10', rango: true, soloAdmin: true },
+  { tipo: 'cartera', titulo: 'Cartera por cobrar', desc: 'Ventas fiadas pendientes con antigüedad y vencimiento (al día de hoy)', icon: HandCoins, color: 'text-amber-600 bg-amber-50 dark:bg-amber-500/10', rango: false, soloAdmin: true },
   { tipo: 'gastos', titulo: 'Gastos', desc: 'Gastos por categoría con totales', icon: Wallet, color: 'text-amber-600 bg-amber-50 dark:bg-amber-500/10', rango: true },
   { tipo: 'cierres', titulo: 'Cierres de caja', desc: 'Historial de cierres con arqueo y diferencias', icon: Calculator, color: 'text-rose-600 bg-rose-50 dark:bg-rose-500/10', rango: true, soloAdmin: true },
   { tipo: 'inventario', titulo: 'Inventario y valorización', desc: 'Stock actual y valor del inventario a costo (foto de hoy)', icon: Package, color: 'text-green-600 bg-green-50 dark:bg-green-500/10', rango: false },

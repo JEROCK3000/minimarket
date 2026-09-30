@@ -26,6 +26,9 @@ Historial de ventas con estado del comprobante (Ticket / Sin emitir / Pendiente 
 ## 6. Clientes (`/clientes`)
 CRUD con búsqueda. Validación real del dígito verificador de **cédula y RUC ecuatoriano** (`src/lib/validators`). Botón de consulta que autocompleta nombre y dirección (busca primero en la BD local): los **RUC** se consultan vía la API central de Solinteec (`apiruc.solinteec.com`, `src/lib/sri/consulta-ruc.ts`, API Key configurable) y las **cédulas** vía EcuadorAPI (token cifrado). Los clientes creados al vuelo en el POS aparecen aquí.
 
+## 6b. Cobros / fiado (`/cobros`)
+Ventas a crédito ("Fiado" en el POS, cliente obligatorio, plazo 30 días). Lista de clientes con saldo y deuda vencida; estado de cuenta; registro de cobros (efectivo/tarjeta/transferencia) aplicados a las ventas más antiguas. El efectivo cobrado entra al arqueo de caja.
+
 ## 7. Gastos (`/gastos`)
 Registro de gastos por categoría con total del mes. Solo ADMIN.
 

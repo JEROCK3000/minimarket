@@ -2,7 +2,7 @@ import type { TicketData } from '@/app/(app)/pos/ticket-actions'
 
 const money = (n: number) => `$${n.toFixed(2)}`
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-const pagoTxt = (fp: string) => (fp === 'TARJETA' ? 'Tarjeta' : fp === 'TRANSFERENCIA' ? 'Transferencia' : 'Efectivo')
+const pagoTxt = (fp: string) => (fp === 'TARJETA' ? 'Tarjeta' : fp === 'TRANSFERENCIA' ? 'Transferencia' : fp === 'CREDITO' ? 'Crédito (fiado)' : 'Efectivo')
 
 /** Filas de items comunes a ambos formatos. */
 function filasItems(t: TicketData): string {

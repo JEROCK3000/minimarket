@@ -6,11 +6,12 @@ import {
   DollarSign, ShoppingCart, Package, AlertTriangle, TrendingUp, Wallet, ArrowRight,
 } from 'lucide-react'
 import { DashboardCharts } from './DashboardCharts'
+import { NOMBRE_FORMA_PAGO } from '@/lib/sri/impuestos'
 
 export const metadata: Metadata = { title: 'Dashboard' }
 
 const NOMBRE_MES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-const NOMBRE_PAGO: Record<string, string> = { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia' }
+const NOMBRE_PAGO = NOMBRE_FORMA_PAGO
 
 export default async function DashboardPage() {
   const sesion = await requerirTenant()

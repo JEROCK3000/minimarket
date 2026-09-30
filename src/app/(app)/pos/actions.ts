@@ -7,10 +7,11 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { calcularVenta } from '@/lib/ventas/totales'
 import { moverStock } from '@/lib/inventario/movimientos'
+import { DIAS_CREDITO } from '@/lib/sri/impuestos'
 
 const ventaSchema = z.object({
   clienteId: z.string().optional().or(z.literal('')),
-  formaPago: z.enum(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA']),
+  formaPago: z.enum(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'CREDITO']),
   requiereFactura: z.boolean(),
   pagoCon: z.coerce.number().min(0).optional(),
   descuento: z.coerce.number().min(0).default(0),
@@ -22,7 +23,7 @@ const ventaSchema = z.object({
 
 export interface VentaFormValues {
   clienteId?: string
-  formaPago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA'
+  formaPago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO'
   requiereFactura: boolean
   pagoCon?: number
   descuento?: number
@@ -67,6 +68,12 @@ export async function registrarVentaAction(data: VentaFormValues) {
       : null
     if (d.clienteId && !comprador) return { error: 'Cliente no encontrado' }
 
+    // Fiado: solo a un cliente identificado (se le cobra después).
+    const esFiado = d.formaPago === 'CREDITO'
+    if (esFiado && (!comprador || comprador.identificacion === '9999999999999')) {
+      return { error: 'Para vender fiado selecciona un cliente registrado (no consumidor final)' }
+    }
+
     // Totales con el cálculo único (IVA por tarifa de cada producto, sobre la
     // base con descuento): los mismos que usará la factura electrónica.
     const calculo = calcularVenta(
@@ -95,7 +102,9 @@ export async function registrarVentaAction(data: VentaFormValues) {
           descuento,
           iva,
           total,
-          pagoCon: d.pagoCon ?? null,
+          pagoCon: esFiado ? null : d.pagoCon ?? null,
+          saldoPendiente: esFiado ? total : 0,
+          diasCredito: esFiado ? DIAS_CREDITO : null,
           requiereFactura: d.requiereFactura,
           items: {
             create: d.items.map((it, i) => ({

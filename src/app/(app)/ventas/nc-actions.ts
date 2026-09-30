@@ -174,7 +174,7 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
           update: { claveAcceso: accessKey, numeroAutorizacion: aut.numeroAutorizacion, estado: 'AUTORIZADA', motivo: motivoLimpio, valorModificacion: total, xmlFirmado: aut.comprobante, fechaAutorizacion: new Date(aut.fechaAutorizacion), mensajeError: null },
           create: { tenantId: sesion.tenantId, ventaId, claveAcceso: accessKey, numeroAutorizacion: aut.numeroAutorizacion, estado: 'AUTORIZADA', motivo: motivoLimpio, valorModificacion: total, xmlFirmado: aut.comprobante, fechaAutorizacion: new Date(aut.fechaAutorizacion) },
         })
-        await tx.venta.update({ where: { id: ventaId }, data: { estado: 'ANULADA' } })
+        await tx.venta.update({ where: { id: ventaId }, data: { estado: 'ANULADA', saldoPendiente: 0 } })
         for (const it of venta.items) {
           const prod = await tx.producto.findUnique({ where: { id: it.productoId } })
           if (!prod) continue

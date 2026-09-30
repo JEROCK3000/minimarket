@@ -19,7 +19,16 @@ const FORMA_PAGO_SRI: Record<string, string> = {
   EFECTIVO: '01',       // sin utilización del sistema financiero
   TARJETA: '19',        // tarjeta de crédito
   TRANSFERENCIA: '20',  // otros con utilización del sistema financiero
+  CREDITO: '01',        // fiado: sin sistema financiero, con plazo (Venta.diasCredito)
 }
+
+/** Nombre para mostrar de la forma de pago del POS. */
+export const NOMBRE_FORMA_PAGO: Record<string, string> = {
+  EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia', CREDITO: 'Crédito (fiado)',
+}
+
+/** Plazo por defecto de una venta a crédito (fiado), en días. */
+export const DIAS_CREDITO = 30
 
 export function formaPagoSri(formaPago: string): string {
   return FORMA_PAGO_SRI[formaPago] ?? '01'

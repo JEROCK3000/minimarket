@@ -19,10 +19,13 @@ export async function anularVentaAction(ventaId: string) {
   try {
     const venta = await prisma.venta.findFirst({
       where: { id: ventaId, tenantId: sesion.tenantId },
-      include: { items: true, factura: true },
+      include: { items: true, factura: true, _count: { select: { abonos: true } } },
     })
     if (!venta) return { error: 'Venta no encontrada' }
     if (venta.estado === 'ANULADA') return { error: 'La venta ya está anulada' }
+    if (venta._count.abonos > 0) {
+      return { error: 'No se puede anular: esta venta a crédito ya tiene abonos registrados.' }
+    }
     if (venta.factura?.estado === 'AUTORIZADA') {
       return { error: 'No se puede anular: la factura ya fue autorizada por el SRI. Requiere una Nota de Crédito.' }
     }
@@ -32,7 +35,7 @@ export async function anularVentaAction(ventaId: string) {
       // llegan a la vez, solo una revierte el stock.
       const marcada = await tx.venta.updateMany({
         where: { id: ventaId, tenantId: sesion.tenantId, estado: { not: 'ANULADA' } },
-        data: { estado: 'ANULADA' },
+        data: { estado: 'ANULADA', saldoPendiente: 0 },
       })
       if (marcada.count === 0) throw new Error('La venta ya está anulada')
       // Revertir stock de cada item (+ entra de vuelta)

@@ -70,6 +70,7 @@ export async function registrarCierreAction(data: { efectivoContado: number; not
           ventasTransfer: r.ventasTransfer,
           totalVendido: r.totalVendido,
           gastosEfectivo: r.gastosEfectivo,
+          abonosEfectivo: r.abonosEfectivo,
           efectivoEsperado: r.efectivoEsperado,
           efectivoContado: contado,
           diferencia,

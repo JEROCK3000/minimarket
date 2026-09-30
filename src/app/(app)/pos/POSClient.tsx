@@ -23,7 +23,7 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
   const [busqueda, setBusqueda] = useState('')
   const [catFiltro, setCatFiltro] = useState<string | null>(null)
   const [carrito, setCarrito] = useState<ItemCarrito[]>([])
-  const [formaPago, setFormaPago] = useState<'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA'>('EFECTIVO')
+  const [formaPago, setFormaPago] = useState<'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO'>('EFECTIVO')
   const [requiereFactura, setRequiereFactura] = useState(true)
   const [pagoCon, setPagoCon] = useState('')
   const [cliente, setCliente] = useState<ClienteSel | null>(null)
@@ -93,6 +93,12 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
   const cobrar = async () => {
     if (carrito.length === 0) { toast.error('El carrito está vacío'); return }
     if (requiereFactura && !cliente) { setModalCliente(true); return }
+    // Fiado: exige un cliente identificado (se le cobra después).
+    if (formaPago === 'CREDITO' && (!cliente || !cliente.id)) {
+      toast.message('Para fiar, selecciona el cliente')
+      setModalCliente(true)
+      return
+    }
     if (formaPago === 'EFECTIVO' && pagoCon && Number(pagoCon) < total) { toast.error('El pago es menor al total'); return }
 
     setProcesando(true)
@@ -213,10 +219,11 @@ export function POSClient({ productos, categorias }: { productos: Prod[]; catego
           )}
 
           {/* Forma de pago */}
-          <div className="grid grid-cols-3 gap-1.5">
-            {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] as const).map((fp) => (
-              <button key={fp} onClick={() => setFormaPago(fp)} className={`py-1.5 rounded-lg text-[11px] font-semibold transition ${formaPago === fp ? 'bg-brand-600 text-white' : 'bg-gray-100 dark:bg-white/5 text-gray-500'}`}>
-                {fp === 'EFECTIVO' ? 'Efectivo' : fp === 'TARJETA' ? 'Tarjeta' : 'Transfer.'}
+          <div className="grid grid-cols-4 gap-1.5">
+            {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'CREDITO'] as const).map((fp) => (
+              <button key={fp} onClick={() => setFormaPago(fp)} title={fp === 'CREDITO' ? 'Venta a crédito: se cobra después en Cobros' : undefined}
+                className={`py-1.5 rounded-lg text-[11px] font-semibold transition ${formaPago === fp ? (fp === 'CREDITO' ? 'bg-amber-500 text-white' : 'bg-brand-600 text-white') : 'bg-gray-100 dark:bg-white/5 text-gray-500'}`}>
+                {fp === 'EFECTIVO' ? 'Efectivo' : fp === 'TARJETA' ? 'Tarjeta' : fp === 'TRANSFERENCIA' ? 'Transfer.' : 'Fiado'}
               </button>
             ))}
           </div>

@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       columnas: [
         { header: 'Cajero', ancho: 28 }, { header: 'Ventas', tipo: 'entero', ancho: 10 }, { header: 'Total vendido', tipo: 'moneda', ancho: 15 },
         { header: 'Ticket promedio', tipo: 'moneda', ancho: 15 }, { header: 'Efectivo', tipo: 'moneda', ancho: 13 },
-        { header: 'Tarjeta/Transf.', tipo: 'moneda', ancho: 15 }, { header: 'Descuentos', tipo: 'moneda', ancho: 13 }, { header: 'Anuladas', tipo: 'entero', ancho: 10 },
+        { header: 'Tarjeta/Transf./Fiado', tipo: 'moneda', ancho: 18 }, { header: 'Descuentos', tipo: 'moneda', ancho: 13 }, { header: 'Anuladas', tipo: 'entero', ancho: 10 },
       ],
       filas: filas.map((c) => [c.nombre, c.n, c.total, c.n ? c.total / c.n : 0, c.efectivo, c.otros, c.descuentos, c.anuladas]),
       totales: ['TOTAL', t.n, t.total, t.n ? t.total / t.n : 0, t.ef, t.ot, t.d, t.an],

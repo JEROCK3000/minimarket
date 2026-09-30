@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db/prisma'
 
 /** Calcula el resumen de caja de un período, sumando el fondo inicial al efectivo esperado. */
 export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: Date, fondoInicial = 0) {
-  const [ventas, gastos] = await Promise.all([
+  const [ventas, gastos, abonos] = await Promise.all([
     prisma.venta.findMany({
       where: { tenantId, estado: 'COMPLETADA', fecha: { gte: desde, lte: hasta } },
       select: { formaPago: true, total: true },
@@ -17,16 +17,25 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
       where: { tenantId, fecha: { gte: desde, lte: hasta } },
       _sum: { monto: true },
     }),
+    // Cobros de fiado recibidos en el período (el efectivo entra a la caja).
+    prisma.abonoVenta.groupBy({
+      by: ['formaPago'],
+      where: { tenantId, createdAt: { gte: desde, lte: hasta } },
+      _sum: { monto: true },
+    }),
   ])
 
-  let efectivo = 0, tarjeta = 0, transfer = 0
+  let efectivo = 0, tarjeta = 0, transfer = 0, credito = 0
   for (const v of ventas) {
     const t = Number(v.total)
     if (v.formaPago === 'EFECTIVO') efectivo += t
     else if (v.formaPago === 'TARJETA') tarjeta += t
+    else if (v.formaPago === 'CREDITO') credito += t // fiado: no entra dinero ahora
     else transfer += t
   }
-  const totalVendido = efectivo + tarjeta + transfer
+  const totalVendido = efectivo + tarjeta + transfer + credito
+  const abonosEfectivo = Number(abonos.find((a) => a.formaPago === 'EFECTIVO')?._sum.monto ?? 0)
+  const abonosOtros = abonos.filter((a) => a.formaPago !== 'EFECTIVO').reduce((s, a) => s + Number(a._sum.monto ?? 0), 0)
   const gastosEfectivo = Number(gastos._sum.monto ?? 0)
 
   return {
@@ -34,10 +43,13 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
     ventasEfectivo: efectivo,
     ventasTarjeta: tarjeta,
     ventasTransfer: transfer,
+    ventasCredito: credito,
     totalVendido,
+    abonosEfectivo,
+    abonosOtros,
     gastosEfectivo,
     fondoInicial,
-    efectivoEsperado: fondoInicial + efectivo - gastosEfectivo,
+    efectivoEsperado: fondoInicial + efectivo + abonosEfectivo - gastosEfectivo,
   }
 }
 

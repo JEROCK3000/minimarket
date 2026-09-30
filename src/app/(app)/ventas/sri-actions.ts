@@ -94,7 +94,7 @@ export async function emitirFacturaVentaAction(ventaId: string) {
         },
         importeTotal: calculo.total.toFixed(2),
         moneda: 'DOLAR',
-        pagos: { pago: [{ formaPago: formaPagoSri(venta.formaPago), total: calculo.total.toFixed(2), plazo: '0', unidadTiempo: 'dias' }] },
+        pagos: { pago: [{ formaPago: formaPagoSri(venta.formaPago), total: calculo.total.toFixed(2), plazo: String(venta.diasCredito ?? 0), unidadTiempo: 'dias' }] },
       },
       detalles: {
         detalle: venta.items.map((item, i) => {

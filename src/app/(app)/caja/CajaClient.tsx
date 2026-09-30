@@ -9,6 +9,7 @@ import { registrarCierreAction, abrirCajaAction } from './actions'
 interface Resumen {
   totalVentas: number; ventasEfectivo: number; ventasTarjeta: number; ventasTransfer: number
   totalVendido: number; gastosEfectivo: number; fondoInicial: number; efectivoEsperado: number
+  ventasCredito: number; abonosEfectivo: number; abonosOtros: number
 }
 interface Apertura { id: string; usuario: string; fondoInicial: number; abiertaAt: string }
 interface Cierre {
@@ -111,6 +112,9 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
               <div className="flex justify-between text-gray-500"><span>Fondo inicial</span><span>{money(resumen.fondoInicial)}</span></div>
             )}
             <div className="flex justify-between text-gray-500"><span>+ Ventas en efectivo</span><span>{money(resumen.ventasEfectivo)}</span></div>
+            {resumen.abonosEfectivo > 0 && (
+              <div className="flex justify-between text-gray-500"><span>+ Cobros de fiado en efectivo</span><span>{money(resumen.abonosEfectivo)}</span></div>
+            )}
             <div className="flex justify-between text-gray-500"><span>− Gastos pagados en efectivo</span><span>−{money(resumen.gastosEfectivo)}</span></div>
             <div className="flex justify-between font-bold text-gray-900 dark:text-white border-t border-gray-100 dark:border-white/5 pt-2">
               <span>Efectivo esperado en caja</span><span>{money(resumen.efectivoEsperado)}</span>
@@ -143,6 +147,13 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
               <div>
                 <p className="text-2xl font-black text-gray-900 dark:text-white">{money(resumen.totalVendido)}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Total vendido en el período (todas las formas de pago)</p>
+                {(resumen.ventasCredito > 0 || resumen.abonosOtros > 0) && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {resumen.ventasCredito > 0 && <>Fiado: {money(resumen.ventasCredito)} (por cobrar)</>}
+                    {resumen.ventasCredito > 0 && resumen.abonosOtros > 0 && ' · '}
+                    {resumen.abonosOtros > 0 && <>Cobros con tarjeta/transferencia: {money(resumen.abonosOtros)}</>}
+                  </p>
+                )}
               </div>
             </div>
           </div>

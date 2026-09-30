@@ -308,7 +308,9 @@ model Venta {
   usuario     Usuario?  @relation(fields: [usuarioId], references: [id])
 
   numero      String    @db.VarChar(30)
-  formaPago   String    @default("EFECTIVO") @db.VarChar(20) // EFECTIVO, TARJETA, TRANSFERENCIA
+  formaPago   String    @default("EFECTIVO") @db.VarChar(20) // EFECTIVO, TARJETA, TRANSFERENCIA, CREDITO (fiado)
+  saldoPendiente Decimal @default(0) @db.Decimal(12, 2) // fiado: lo que falta cobrar (0 si se pagó al contado)
+  diasCredito Int?      // fiado: plazo en días (va a la factura SRI)
   subtotal    Decimal   @default(0) @db.Decimal(12, 2)
   descuento   Decimal   @default(0) @db.Decimal(12, 2)
   iva         Decimal   @default(0) @db.Decimal(12, 2)
@@ -322,6 +324,7 @@ model Venta {
   items       VentaItem[]
   factura     FacturaSRI?
   notaCredito NotaCredito?
+  abonos      AbonoVenta[]
 
   @@index([tenantId])
   @@index([clienteId])
@@ -331,6 +334,28 @@ model Venta {
 enum EstadoVenta {
   COMPLETADA
   ANULADA
+}
+
+// Abono (pago parcial o total) a una venta a crédito (fiado). Un cobro del
+// cliente se reparte en abonos a sus ventas pendientes, de la más antigua a la
+// más nueva; cada abono descuenta Venta.saldoPendiente de forma atómica.
+model AbonoVenta {
+  id            String   @id @default(cuid())
+  tenantId      String
+  ventaId       String
+  venta         Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  clienteId     String
+  monto         Decimal  @db.Decimal(12, 2)
+  formaPago     String   @db.VarChar(20) // EFECTIVO, TARJETA, TRANSFERENCIA
+  notas         String?  @db.VarChar(200)
+  usuarioId     String?
+  usuarioNombre String?  @db.VarChar(120)
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([ventaId])
+  @@index([clienteId])
+  @@map("abonos_venta")
 }
 
 model VentaItem {
@@ -387,7 +412,8 @@ model CierreCaja {
   ventasTransfer   Decimal  @default(0) @db.Decimal(12, 2)
   totalVendido     Decimal  @default(0) @db.Decimal(12, 2)
   gastosEfectivo   Decimal  @default(0) @db.Decimal(12, 2)
-  efectivoEsperado Decimal  @default(0) @db.Decimal(12, 2) // efectivo ventas − gastos
+  abonosEfectivo   Decimal  @default(0) @db.Decimal(12, 2) // cobros de fiado recibidos en efectivo
+  efectivoEsperado Decimal  @default(0) @db.Decimal(12, 2) // fondo + efectivo ventas + abonos efectivo − gastos
   efectivoContado  Decimal  @default(0) @db.Decimal(12, 2) // lo que contó físicamente
   diferencia       Decimal  @default(0) @db.Decimal(12, 2) // contado − esperado
   notas            String?  @db.Text
