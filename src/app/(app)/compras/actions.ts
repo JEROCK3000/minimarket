@@ -47,6 +47,8 @@ const compraSchema = z.object({
   proveedorId: z.string().trim().optional().or(z.literal('')),
   numFactura: z.string().trim().max(40).optional().or(z.literal('')),
   notas: z.string().trim().max(500).optional().or(z.literal('')),
+  condicionPago: z.enum(['CONTADO', 'CREDITO']).default('CONTADO'),
+  diasPlazo: z.coerce.number().int().min(1).max(365).default(30),
   items: z.array(z.object({
     productoId: z.string().min(1),
     cantidad: z.coerce.number().positive('Cantidad inválida'),
@@ -58,6 +60,8 @@ export interface CompraFormValues {
   proveedorId?: string
   numFactura?: string
   notas?: string
+  condicionPago?: 'CONTADO' | 'CREDITO'
+  diasPlazo?: number
   items: { productoId: string; cantidad: number; precioUnitario: number; fechaVencimiento?: string }[]
 }
 
@@ -91,6 +95,12 @@ export async function crearCompraAction(data: CompraFormValues) {
       iva += sub * (Number(prod.ivaPorcentaje) / 100)
     }
     const total = subtotal + iva
+    if (d.proveedorId) {
+      const prov = await prisma.proveedor.findFirst({ where: { id: d.proveedorId, tenantId: sesion.tenantId }, select: { id: true } })
+      if (!prov) return { error: 'Proveedor no válido' }
+    }
+    const aCredito = d.condicionPago === 'CREDITO'
+    if (aCredito && !d.proveedorId) return { error: 'Una compra a crédito necesita un proveedor' }
 
     // Transacción: compra + items + actualización de stock + kardex + precio compra
     await prisma.$transaction(async (tx) => {
@@ -101,6 +111,9 @@ export async function crearCompraAction(data: CompraFormValues) {
           numero,
           numFactura: d.numFactura || null,
           notas: d.notas || null,
+          condicionPago: d.condicionPago,
+          saldoPendiente: aCredito ? total : 0,
+          venceEl: aCredito ? new Date(Date.now() + d.diasPlazo * 86400000) : null,
           subtotal,
           iva,
           total,
@@ -151,6 +164,9 @@ export interface CompraDetalle {
   subtotal: number
   iva: number
   total: number
+  condicionPago: string
+  saldoPendiente: number
+  venceEl: string | null
 }
 
 export async function obtenerCompraAction(id: string): Promise<{ success: true; compra: CompraDetalle } | { error: string }> {
@@ -176,6 +192,7 @@ export async function obtenerCompraAction(id: string): Promise<{ success: true; 
         fechaVencimiento: it.fechaVencimiento ? it.fechaVencimiento.toISOString().slice(0, 10) : null,
       })),
       subtotal: Number(c.subtotal), iva: Number(c.iva), total: Number(c.total),
+      condicionPago: c.condicionPago, saldoPendiente: Number(c.saldoPendiente), venceEl: c.venceEl?.toISOString() ?? null,
     },
   }
 }
@@ -199,17 +216,18 @@ export async function anularCompraAction(id: string, motivo: string) {
 
   const compra = await prisma.compra.findFirst({
     where: { id, tenantId: sesion.tenantId },
-    include: { items: { include: { producto: { select: { nombre: true } } } } },
+    include: { items: { include: { producto: { select: { nombre: true } } } }, _count: { select: { pagos: true } } },
   })
   if (!compra) return { error: 'Compra no encontrada' }
   if (compra.estado === 'ANULADA') return { error: 'La compra ya está anulada' }
+  if (compra._count.pagos > 0) return { error: 'No se puede anular: esta compra a crédito ya tiene pagos registrados al proveedor' }
 
   try {
     await prisma.$transaction(async (tx) => {
       // Marcar primero, condicionado: dos anulaciones simultáneas no restan dos veces.
       const marcada = await tx.compra.updateMany({
         where: { id, tenantId: sesion.tenantId, estado: 'ACTIVA' },
-        data: { estado: 'ANULADA', anuladaAt: new Date(), motivoAnulacion: parsed.data.motivo },
+        data: { estado: 'ANULADA', anuladaAt: new Date(), motivoAnulacion: parsed.data.motivo, saldoPendiente: 0 },
       })
       if (marcada.count === 0) throw new ErrorNegocio('La compra ya está anulada')
 

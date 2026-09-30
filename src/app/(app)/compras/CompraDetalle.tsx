@@ -81,6 +81,15 @@ export function CompraDetalle({ compraId, puedeEditar, onClose }: { compraId: st
                 <p className={lbl}>Factura del proveedor</p>
                 <p className="font-mono text-gray-900 dark:text-white">{compra.numFactura || '—'}</p>
               </div>
+              <div>
+                <p className={lbl}>Pago al proveedor</p>
+                <p className="text-gray-900 dark:text-white">{compra.condicionPago === 'CREDITO' ? 'A crédito' : 'Contado'}</p>
+                {compra.condicionPago === 'CREDITO' && (
+                  <p className={`text-xs ${compra.saldoPendiente > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                    {compra.saldoPendiente > 0 ? `Saldo ${money(compra.saldoPendiente)}${compra.venceEl ? ` · vence ${new Date(compra.venceEl).toLocaleDateString('es-EC')}` : ''}` : 'Pagada'}
+                  </p>
+                )}
+              </div>
             </div>
 
             {compra.notas && (

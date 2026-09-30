@@ -9,7 +9,7 @@ import { registrarCierreAction, abrirCajaAction } from './actions'
 interface Resumen {
   totalVentas: number; ventasEfectivo: number; ventasTarjeta: number; ventasTransfer: number
   totalVendido: number; gastosEfectivo: number; fondoInicial: number; efectivoEsperado: number
-  ventasCredito: number; abonosEfectivo: number; abonosOtros: number
+  ventasCredito: number; abonosEfectivo: number; abonosOtros: number; pagosProveedorEfectivo: number
 }
 interface Apertura { id: string; usuario: string; fondoInicial: number; abiertaAt: string }
 interface Cierre {
@@ -116,6 +116,9 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
               <div className="flex justify-between text-gray-500"><span>+ Cobros de fiado en efectivo</span><span>{money(resumen.abonosEfectivo)}</span></div>
             )}
             <div className="flex justify-between text-gray-500"><span>− Gastos pagados en efectivo</span><span>−{money(resumen.gastosEfectivo)}</span></div>
+            {resumen.pagosProveedorEfectivo > 0 && (
+              <div className="flex justify-between text-gray-500"><span>− Pagos a proveedores en efectivo</span><span>−{money(resumen.pagosProveedorEfectivo)}</span></div>
+            )}
             <div className="flex justify-between font-bold text-gray-900 dark:text-white border-t border-gray-100 dark:border-white/5 pt-2">
               <span>Efectivo esperado en caja</span><span>{money(resumen.efectivoEsperado)}</span>
             </div>

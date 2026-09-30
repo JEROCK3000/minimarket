@@ -242,15 +242,39 @@ model Compra {
   total       Decimal   @default(0) @db.Decimal(12, 2)
   notas       String?   @db.Text
   estado      String    @default("ACTIVA") @db.VarChar(10) // ACTIVA | ANULADA
+  condicionPago String  @default("CONTADO") @db.VarChar(10) // CONTADO | CREDITO (a pagar al proveedor)
+  saldoPendiente Decimal @default(0) @db.Decimal(12, 2) // crédito: lo que falta pagar al proveedor
+  venceEl     DateTime? // crédito: fecha límite de pago
   anuladaAt   DateTime?
   motivoAnulacion String? @db.VarChar(300)
   fecha       DateTime  @default(now())
   createdAt   DateTime  @default(now())
 
   items       CompraItem[]
+  pagos       PagoCompra[]
 
   @@index([tenantId])
   @@map("compras")
+}
+
+// Pago a proveedor de una compra a crédito (cuentas por pagar). Descuenta
+// Compra.saldoPendiente de forma atómica; el efectivo sale de la caja.
+model PagoCompra {
+  id            String   @id @default(cuid())
+  tenantId      String
+  compraId      String
+  compra        Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  proveedorId   String?
+  monto         Decimal  @db.Decimal(12, 2)
+  formaPago     String   @db.VarChar(20) // EFECTIVO, TRANSFERENCIA, TARJETA, CHEQUE
+  notas         String?  @db.VarChar(200)
+  usuarioId     String?
+  usuarioNombre String?  @db.VarChar(120)
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([compraId])
+  @@map("pagos_compra")
 }
 
 model CompraItem {
@@ -413,6 +437,7 @@ model CierreCaja {
   totalVendido     Decimal  @default(0) @db.Decimal(12, 2)
   gastosEfectivo   Decimal  @default(0) @db.Decimal(12, 2)
   abonosEfectivo   Decimal  @default(0) @db.Decimal(12, 2) // cobros de fiado recibidos en efectivo
+  pagosProveedorEfectivo Decimal @default(0) @db.Decimal(12, 2) // pagos a proveedores en efectivo (salen de caja)
   efectivoEsperado Decimal  @default(0) @db.Decimal(12, 2) // fondo + efectivo ventas + abonos efectivo − gastos
   efectivoContado  Decimal  @default(0) @db.Decimal(12, 2) // lo que contó físicamente
   diferencia       Decimal  @default(0) @db.Decimal(12, 2) // contado − esperado

@@ -16,6 +16,8 @@ export function CompraForm({
   const [provs, setProvs] = useState(proveedores)
   const [proveedorId, setProveedorId] = useState('')
   const [numFactura, setNumFactura] = useState('')
+  const [condicionPago, setCondicionPago] = useState<'CONTADO' | 'CREDITO'>('CONTADO')
+  const [diasPlazo, setDiasPlazo] = useState('30')
   const [lineas, setLineas] = useState<Linea[]>([{ productoId: '', cantidad: '1', precioUnitario: '', fechaVencimiento: '' }])
   const [loading, setLoading] = useState(false)
   const [nuevoProv, setNuevoProv] = useState('')
@@ -60,7 +62,7 @@ export function CompraForm({
 
     setLoading(true)
     try {
-      const res = await crearCompraAction({ proveedorId, numFactura, items })
+      const res = await crearCompraAction({ proveedorId, numFactura, items, condicionPago, diasPlazo: Number(diasPlazo) || 30 })
       if (res.success) {
         toast.success(`Compra ${res.numero} registrada. Stock actualizado.`)
         onClose()
@@ -94,6 +96,28 @@ export function CompraForm({
               <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Nº factura del proveedor</label>
               <input value={numFactura} onChange={(e) => setNumFactura(e.target.value)} className="input font-mono" placeholder="Opcional" />
             </div>
+          </div>
+
+          {/* Condición de pago al proveedor */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Pago al proveedor</label>
+              <div className="inline-flex rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden" role="group">
+                {(['CONTADO', 'CREDITO'] as const).map((cp) => (
+                  <button key={cp} type="button" onClick={() => setCondicionPago(cp)} aria-pressed={condicionPago === cp}
+                    className={`px-3 py-1.5 text-xs font-semibold ${condicionPago === cp ? 'bg-brand-600 text-white' : 'bg-white dark:bg-white/5 text-gray-600 dark:text-gray-300'}`}>
+                    {cp === 'CONTADO' ? 'Contado' : 'A crédito'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {condicionPago === 'CREDITO' && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400" htmlFor="c-plazo">Plazo (días)</label>
+                <input id="c-plazo" type="number" min={1} max={365} value={diasPlazo} onChange={(e) => setDiasPlazo(e.target.value)} className="input w-24" />
+              </div>
+            )}
+            {condicionPago === 'CREDITO' && <p className="text-[11px] text-gray-400 pb-2">Quedará como cuenta por pagar en Proveedores.</p>}
           </div>
 
           {/* Crear proveedor rápido */}

@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db/prisma'
 
 /** Calcula el resumen de caja de un período, sumando el fondo inicial al efectivo esperado. */
 export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: Date, fondoInicial = 0) {
-  const [ventas, gastos, abonos] = await Promise.all([
+  const [ventas, gastos, abonos, pagosProv] = await Promise.all([
     prisma.venta.findMany({
       where: { tenantId, estado: 'COMPLETADA', fecha: { gte: desde, lte: hasta } },
       select: { formaPago: true, total: true },
@@ -23,6 +23,11 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
       where: { tenantId, createdAt: { gte: desde, lte: hasta } },
       _sum: { monto: true },
     }),
+    // Pagos a proveedores en efectivo (compras a crédito): salen de la caja.
+    prisma.pagoCompra.aggregate({
+      where: { tenantId, formaPago: 'EFECTIVO', createdAt: { gte: desde, lte: hasta } },
+      _sum: { monto: true },
+    }),
   ])
 
   let efectivo = 0, tarjeta = 0, transfer = 0, credito = 0
@@ -35,6 +40,7 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
   }
   const totalVendido = efectivo + tarjeta + transfer + credito
   const abonosEfectivo = Number(abonos.find((a) => a.formaPago === 'EFECTIVO')?._sum.monto ?? 0)
+  const pagosProveedorEfectivo = Number(pagosProv._sum.monto ?? 0)
   const abonosOtros = abonos.filter((a) => a.formaPago !== 'EFECTIVO').reduce((s, a) => s + Number(a._sum.monto ?? 0), 0)
   const gastosEfectivo = Number(gastos._sum.monto ?? 0)
 
@@ -47,9 +53,10 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
     totalVendido,
     abonosEfectivo,
     abonosOtros,
+    pagosProveedorEfectivo,
     gastosEfectivo,
     fondoInicial,
-    efectivoEsperado: fondoInicial + efectivo + abonosEfectivo - gastosEfectivo,
+    efectivoEsperado: fondoInicial + efectivo + abonosEfectivo - gastosEfectivo - pagosProveedorEfectivo,
   }
 }
 
