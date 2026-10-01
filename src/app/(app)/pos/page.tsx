@@ -2,13 +2,14 @@ import type { Metadata } from 'next'
 import { requerirTenant } from '@/lib/auth/tenant'
 import { prisma } from '@/lib/db/prisma'
 import { POSClient } from './POSClient'
+import { cajaAbierta } from '@/lib/caja/estado'
 
 export const metadata: Metadata = { title: 'Punto de Venta' }
 
 export default async function POSPage() {
   const sesion = await requerirTenant()
 
-  const [productos, categorias] = await Promise.all([
+  const [productos, categorias, apertura] = await Promise.all([
     prisma.producto.findMany({
       where: { tenantId: sesion.tenantId, activo: true, vendible: true },
       include: { categoria: { select: { nombre: true } } },
@@ -19,6 +20,7 @@ export default async function POSPage() {
       orderBy: { nombre: 'asc' },
       select: { id: true, nombre: true, icono: true },
     }),
+    cajaAbierta(sesion.tenantId),
   ])
 
   const productosPlanos = productos.map((p) => ({
@@ -37,6 +39,7 @@ export default async function POSPage() {
     <POSClient
       productos={productosPlanos}
       categorias={categorias.map((c) => ({ id: c.id, nombre: c.nombre, icono: c.icono }))}
+      cajaAbierta={!!apertura}
     />
   )
 }

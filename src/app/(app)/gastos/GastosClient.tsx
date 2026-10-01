@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Plus, Wallet, Trash2, Loader2, X, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { crearGastoAction, eliminarGastoAction } from './actions'
+import { hoyLocalISO } from '@/lib/utils/fechas'
 
 interface GastoRow { id: string; categoria: string; descripcion: string; monto: number; fecha: string }
 
@@ -78,7 +79,7 @@ export function GastosClient({ gastos, totalMes, puedeEditar }: { gastos: GastoR
 }
 
 function GastoModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState({ categoria: 'Servicios básicos', descripcion: '', monto: '', fecha: new Date().toISOString().slice(0, 10) })
+  const [form, setForm] = useState({ categoria: 'Servicios básicos', descripcion: '', monto: '', fecha: hoyLocalISO() })
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {

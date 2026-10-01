@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { hoyLocalISO } from '@/lib/utils/fechas'
 import ExcelJS from 'exceljs'
 import { generarReportePdf, usd } from '@/lib/reports/pdf-reporte'
 
@@ -34,7 +35,7 @@ const fmtPdf = (v: string | number | null, tipo: TipoColumna = 'texto') => {
 }
 
 export async function responderReporte(r: DefinicionReporte): Promise<NextResponse> {
-  const fecha = new Date().toISOString().slice(0, 10)
+  const fecha = hoyLocalISO()
   const alinear = (t?: TipoColumna) => (t && t !== 'texto' ? 'right' : 'left') as 'left' | 'right'
 
   if (r.formato === 'pdf') {

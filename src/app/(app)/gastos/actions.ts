@@ -5,12 +5,13 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { fechaDeDia } from '@/lib/utils/fechas'
 
 const gastoSchema = z.object({
   categoria: z.string().trim().min(1, 'La categoría es requerida').max(60),
   descripcion: z.string().trim().min(1, 'La descripción es requerida').max(300),
   monto: z.coerce.number().positive('El monto debe ser mayor a 0').max(9999999),
-  fecha: z.string().optional(),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida').optional().or(z.literal('')),
 })
 export interface GastoFormValues {
   categoria: string
@@ -32,7 +33,7 @@ export async function crearGastoAction(data: GastoFormValues) {
         categoria: d.categoria,
         descripcion: d.descripcion,
         monto: d.monto,
-        fecha: d.fecha ? new Date(d.fecha) : new Date(),
+        fecha: fechaDeDia(d.fecha),
       },
     })
     await registrarLog('AUDIT', 'GASTOS', `Gasto registrado: ${d.descripcion} (${d.monto})`, undefined, sesion.tenantId)

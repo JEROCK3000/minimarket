@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { FileSpreadsheet, FileText, Download, Loader2, Package, Wallet, TrendingUp, Users, Truck, Calculator, Snowflake, CalendarClock, HandCoins } from 'lucide-react'
 import { toast } from 'sonner'
+import { hoyLocalISO, inicioMesLocalISO } from '@/lib/utils/fechas'
 
 type Tipo = 'ventas' | 'gastos' | 'inventario' | 'utilidad' | 'cajeros' | 'compras' | 'cierres' | 'sin-movimiento' | 'por-vencer' | 'cartera'
 type Formato = 'excel' | 'pdf'
@@ -32,8 +33,8 @@ function nombreArchivo(res: Response, respaldo: string) {
 }
 
 export function ReportesClient({ esAdmin }: { esAdmin: boolean }) {
-  const primerDia = new Date(new Date().setDate(1)).toISOString().slice(0, 10)
-  const hoy = new Date().toISOString().slice(0, 10)
+  const primerDia = inicioMesLocalISO()
+  const hoy = hoyLocalISO()
   const [desde, setDesde] = useState(primerDia)
   const [hasta, setHasta] = useState(hoy)
   const [dias, setDias] = useState('30')

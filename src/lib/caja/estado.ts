@@ -84,3 +84,12 @@ export async function obtenerEstadoCaja(tenantId: string) {
     resumen,
   }
 }
+
+/** Apertura de caja vigente (sin cerrar) del tenant, o null si la caja está cerrada. */
+export async function cajaAbierta(tenantId: string) {
+  return prisma.aperturaCaja.findFirst({
+    where: { tenantId, cerradaAt: null },
+    orderBy: { abiertaAt: 'desc' },
+    select: { id: true, usuarioNombre: true, fondoInicial: true, abiertaAt: true },
+  })
+}

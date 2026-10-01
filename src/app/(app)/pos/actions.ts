@@ -8,6 +8,8 @@ import { z } from 'zod'
 import { calcularVenta } from '@/lib/ventas/totales'
 import { moverStock } from '@/lib/inventario/movimientos'
 import { DIAS_CREDITO } from '@/lib/sri/impuestos'
+import { CONSUMIDOR_FINAL } from '@/lib/clientes/identificacion'
+import { cajaAbierta } from '@/lib/caja/estado'
 
 const ventaSchema = z.object({
   clienteId: z.string().optional().or(z.literal('')),
@@ -37,6 +39,11 @@ export async function registrarVentaAction(data: VentaFormValues) {
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data
 
+  // Solo se vende con la caja abierta (el arqueo depende de la apertura).
+  if (!(await cajaAbierta(sesion.tenantId))) {
+    return { error: 'La caja está cerrada. Ábrela para poder vender.', cajaCerrada: true }
+  }
+
   try {
     // Cargar productos del tenant y validar stock
     const ids = d.items.map((i) => i.productoId)
@@ -53,20 +60,20 @@ export async function registrarVentaAction(data: VentaFormValues) {
       }
     }
 
-    // Si requiere factura, exige un cliente identificado
-    if (d.requiereFactura && !d.clienteId) {
-      return { error: 'Para emitir factura electrónica selecciona un cliente' }
-    }
+    // Factura sin cliente elegido = factura a CONSUMIDOR FINAL (9999999999999):
+    // se usa (o se crea una sola vez) ese cliente del tenant.
+    let clienteId = d.clienteId || null
+    if (d.requiereFactura && !clienteId) clienteId = (await clienteConsumidorFinal(sesion.tenantId)).id
 
     // El cliente debe ser del tenant; su identificación se congela en la venta
     // (puede facturar otro día con cédula o RUC sin alterar esta venta).
-    const comprador = d.clienteId
+    const comprador = clienteId
       ? await prisma.cliente.findFirst({
-          where: { id: d.clienteId, tenantId: sesion.tenantId },
+          where: { id: clienteId, tenantId: sesion.tenantId },
           select: { tipoIdentificacion: true, identificacion: true },
         })
       : null
-    if (d.clienteId && !comprador) return { error: 'Cliente no encontrado' }
+    if (clienteId && !comprador) return { error: 'Cliente no encontrado' }
 
     // Fiado: solo a un cliente identificado (se le cobra después).
     const esFiado = d.formaPago === 'CREDITO'
@@ -85,6 +92,11 @@ export async function registrarVentaAction(data: VentaFormValues) {
     )
     const { subtotal, descuento, iva, total } = calculo
 
+    // Normativa SRI: no se emite factura a Consumidor Final por más de USD 50.
+    if (d.requiereFactura && comprador?.identificacion === CONSUMIDOR_FINAL && total > LIMITE_CONSUMIDOR_FINAL) {
+      return { error: `El total ($${total.toFixed(2)}) supera $${LIMITE_CONSUMIDOR_FINAL}: el SRI no permite facturar a Consumidor Final. Identifica al cliente.` }
+    }
+
     const count = await prisma.venta.count({ where: { tenantId: sesion.tenantId } })
     const numero = `VEN-${String(count + 1).padStart(6, '0')}`
 
@@ -92,7 +104,7 @@ export async function registrarVentaAction(data: VentaFormValues) {
       const v = await tx.venta.create({
         data: {
           tenantId: sesion.tenantId,
-          clienteId: d.clienteId || null,
+          clienteId,
           tipoIdentificacionComprador: comprador?.tipoIdentificacion ?? null,
           identificacionComprador: comprador?.identificacion ?? null,
           usuarioId: sesion.sub,
@@ -222,4 +234,17 @@ export async function actualizarClienteRapidoAction(id: string, data: ClienteRap
     if (error.code === 'P2002') return { error: 'Ya existe un cliente con esa identificación' }
     return { error: 'No se pudo actualizar el cliente' }
   }
+}
+
+/** Límite SRI para facturar a Consumidor Final (USD). */
+const LIMITE_CONSUMIDOR_FINAL = 50
+
+/** Cliente "CONSUMIDOR FINAL" del tenant (se crea la primera vez que se necesita). */
+async function clienteConsumidorFinal(tenantId: string) {
+  return prisma.cliente.upsert({
+    where: { tenantId_identificacion: { tenantId, identificacion: CONSUMIDOR_FINAL } },
+    update: {},
+    create: { tenantId, identificacion: CONSUMIDOR_FINAL, nombre: 'CONSUMIDOR FINAL', tipoIdentificacion: 'CONSUMIDOR_FINAL' },
+    select: { id: true },
+  })
 }
