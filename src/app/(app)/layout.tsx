@@ -4,6 +4,7 @@ import { logoutAction } from '@/lib/auth/actions'
 import { prisma } from '@/lib/db/prisma'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { LogOut } from 'lucide-react'
+import { usaControlCaja } from '@/lib/config/negocio'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const sesion = await obtenerSesion()
@@ -12,11 +13,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const tenant = sesion.tenantId
     ? await prisma.tenant.findUnique({ where: { id: sesion.tenantId }, select: { nombre: true } })
     : null
+  const usarCaja = sesion.tenantId ? await usaControlCaja(sesion.tenantId) : true
   const nombreTenant = tenant?.nombre || process.env.NEXT_PUBLIC_APP_NAME || 'MiniMarket'
 
   return (
     <div className="min-h-screen flex bg-gray-50 dark:bg-[#070710]">
-      <Sidebar nombreTenant={nombreTenant} rol={sesion.rol} />
+      <Sidebar nombreTenant={nombreTenant} rol={sesion.rol} usarCaja={usarCaja} />
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-14 border-b border-gray-100 dark:border-white/5 bg-white/80 dark:bg-[#0a0a16]/80 backdrop-blur sticky top-0 z-20 flex items-center justify-end px-4 gap-4">

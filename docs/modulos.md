@@ -52,6 +52,7 @@ Exportación a **Excel** (.xlsx, `exceljs`) y **PDF** (jsPDF + autotable, genera
 Los PDF llevan encabezado con la empresa, contexto/filtros, fila de totales, fecha de generación y numeración de páginas.
 
 ## 10. Configuración (`/configuracion`, pestañas)
+- **Operación**: activar o desactivar el control de caja (activo por defecto). Desactivado, se vende sin abrir caja y el módulo de caja se oculta del menú.
 - **Impresora**: IP de la impresora térmica de red, prueba de impresión, estado y descarga del agente local (`print-agent/`, puerto 9448). Ver `print-agent/README.md`.
 - **Facturación SRI**: datos del emisor, firma `.p12` (contraseña **cifrada** AES-256), token de EcuadorAPI (cifrado). Ambiente pruebas/producción.
 - **Correo**: servidor SMTP (contraseña cifrada) con botón de prueba de conexión.

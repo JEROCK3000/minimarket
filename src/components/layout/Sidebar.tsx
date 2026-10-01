@@ -19,21 +19,21 @@ const MODULOS = [
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/cobros', label: 'Cobros (fiado)', icon: HandCoins },
   { href: '/gastos', label: 'Gastos', icon: Wallet },
-  { href: '/caja', label: 'Cierre de Caja', icon: Calculator },
+  { href: '/caja', label: 'Cierre de Caja', icon: Calculator, requiereCaja: true },
   { href: '/reportes', label: 'Reportes', icon: FileText },
   { href: '/usuarios', label: 'Usuarios', icon: UserCog, soloAdmin: true },
   { href: '/auditoria', label: 'Auditoría', icon: ShieldCheck, soloAdmin: true },
   { href: '/configuracion', label: 'Configuración', icon: Settings },
-] as { href: string; label: string; icon: typeof Settings; destacado?: boolean; soloAdmin?: boolean }[]
+] as { href: string; label: string; icon: typeof Settings; destacado?: boolean; soloAdmin?: boolean; requiereCaja?: boolean }[]
 
-export function Sidebar({ nombreTenant, rol }: { nombreTenant: string; rol?: string }) {
+export function Sidebar({ nombreTenant, rol, usarCaja = true }: { nombreTenant: string; rol?: string; usarCaja?: boolean }) {
   const esAdmin = rol === 'ADMIN' || rol === 'SUPERADMIN'
   const pathname = usePathname()
   const [abierto, setAbierto] = useState(false)
 
   const nav = (
     <nav className="flex flex-col gap-1">
-      {MODULOS.filter((m) => !m.soloAdmin || esAdmin).map((m) => {
+      {MODULOS.filter((m) => (!m.soloAdmin || esAdmin) && (!m.requiereCaja || usarCaja)).map((m) => {
         const activo = pathname === m.href || pathname.startsWith(m.href + '/')
         return (
           <Link

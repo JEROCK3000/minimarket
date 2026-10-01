@@ -3,6 +3,7 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { prisma } from '@/lib/db/prisma'
 import { POSClient } from './POSClient'
 import { cajaAbierta } from '@/lib/caja/estado'
+import { usaControlCaja } from '@/lib/config/negocio'
 
 export const metadata: Metadata = { title: 'Punto de Venta' }
 
@@ -22,6 +23,8 @@ export default async function POSPage() {
     }),
     cajaAbierta(sesion.tenantId),
   ])
+  // Sin control de caja (Configuración → Operación) se vende sin abrirla.
+  const puedeVender = !(await usaControlCaja(sesion.tenantId)) || !!apertura
 
   const productosPlanos = productos.map((p) => ({
     id: p.id,
@@ -39,7 +42,7 @@ export default async function POSPage() {
     <POSClient
       productos={productosPlanos}
       categorias={categorias.map((c) => ({ id: c.id, nombre: c.nombre, icono: c.icono }))}
-      cajaAbierta={!!apertura}
+      cajaAbierta={puedeVender}
     />
   )
 }

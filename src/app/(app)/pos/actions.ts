@@ -10,6 +10,7 @@ import { moverStock } from '@/lib/inventario/movimientos'
 import { DIAS_CREDITO } from '@/lib/sri/impuestos'
 import { CONSUMIDOR_FINAL } from '@/lib/clientes/identificacion'
 import { cajaAbierta } from '@/lib/caja/estado'
+import { usaControlCaja } from '@/lib/config/negocio'
 
 const ventaSchema = z.object({
   clienteId: z.string().optional().or(z.literal('')),
@@ -39,8 +40,9 @@ export async function registrarVentaAction(data: VentaFormValues) {
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data
 
-  // Solo se vende con la caja abierta (el arqueo depende de la apertura).
-  if (!(await cajaAbierta(sesion.tenantId))) {
+  // Con control de caja activo (Configuración → Operación), solo se vende con la
+  // caja abierta: el arqueo depende de la apertura.
+  if ((await usaControlCaja(sesion.tenantId)) && !(await cajaAbierta(sesion.tenantId))) {
     return { error: 'La caja está cerrada. Ábrela para poder vender.', cajaCerrada: true }
   }
 
