@@ -79,6 +79,7 @@ export function envolverFactura(invoiceData: any, accessKey: string) {
       },
       infoFactura: invoiceData.infoFactura,
       detalles: invoiceData.detalles,
+      ...(invoiceData.infoAdicional ? { infoAdicional: invoiceData.infoAdicional } : {}),
     },
   }
 }

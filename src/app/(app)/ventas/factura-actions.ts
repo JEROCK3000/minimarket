@@ -8,6 +8,8 @@ import { enviarFacturaPorEmail } from '@/lib/utils/email'
 import { format } from 'date-fns'
 import { readFileSync, existsSync } from 'fs'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
+import { calcularVenta } from '@/lib/ventas/totales'
+import { extraerInfoAdicional } from '@/lib/sri/info-adicional'
 
 /** Carga el logo del emisor desde disco y lo devuelve como base64 para el RIDE. */
 function cargarLogo(logoPath: string | null): { base64: string; formato: 'PNG' | 'JPEG' } | null {
@@ -40,14 +42,7 @@ async function construirRide(tenantId: string, ventaId: string) {
   const seq = venta.factura.claveAcceso.substring(30, 39)
   const numeroFactura = `${estab}-${ptoEmi}-${seq}`
 
-  // Desglose de subtotales por tarifa de IVA (15% vs 0%/exento)
-  let subtotal15 = 0, subtotal0 = 0
-  for (const it of venta.items) {
-    const base = Number(it.subtotal)
-    if (Number(it.producto.ivaPorcentaje) > 0) subtotal15 += base
-    else subtotal0 += base
-  }
-  const subtotalSinImpuestos = Number(venta.subtotal) - Number(venta.descuento)
+  const { items, totales } = datosRide(venta)
 
   const pdfBase64 = generarRidePDF({
     emisor: {
@@ -69,18 +64,8 @@ async function construirRide(tenantId: string, ventaId: string) {
       direccion: venta.cliente?.direccion ?? null,
       email: venta.cliente?.email ?? null,
     },
-    items: venta.items.map((it) => ({
-      codigo: it.productoId.slice(-6),
-      descripcion: it.producto.nombre,
-      cantidad: Number(it.cantidad),
-      precioUnitario: Number(it.precioUnitario),
-      descuento: 0,
-      subtotal: Number(it.subtotal),
-    })),
-    totales: {
-      subtotal15, subtotal0, subtotalSinImpuestos,
-      descuento: Number(venta.descuento), iva: Number(venta.iva), total: Number(venta.total),
-    },
+    items, totales,
+    infoAdicional: extraerInfoAdicional(venta.factura.xmlFirmado),
     logo: cargarLogo(emisor.logoPath),
   })
 
@@ -146,12 +131,7 @@ async function construirRideNC(tenantId: string, ventaId: string) {
   const caF = facturaOriginal?.claveAcceso ?? ''
   const numFactura = caF ? `${caF.substring(24, 27)}-${caF.substring(27, 30)}-${caF.substring(30, 39)}` : '—'
 
-  let subtotal15 = 0, subtotal0 = 0
-  for (const it of venta.items) {
-    const base = Number(it.subtotal)
-    if (Number(it.producto.ivaPorcentaje) > 0) subtotal15 += base
-    else subtotal0 += base
-  }
+  const { items, totales } = datosRide(venta)
 
   const pdfBase64 = generarRidePDF({
     tipoDocumento: 'NOTA_CREDITO',
@@ -169,14 +149,8 @@ async function construirRideNC(tenantId: string, ventaId: string) {
       nombre: venta.cliente?.nombre ?? 'CONSUMIDOR FINAL', identificacion: compradorDeVenta(venta)?.identificacion ?? '9999999999999',
       direccion: venta.cliente?.direccion ?? null, email: venta.cliente?.email ?? null,
     },
-    items: venta.items.map((it) => ({
-      codigo: it.productoId.slice(-6), descripcion: it.producto.nombre, cantidad: Number(it.cantidad),
-      precioUnitario: Number(it.precioUnitario), descuento: 0, subtotal: Number(it.subtotal),
-    })),
-    totales: {
-      subtotal15, subtotal0, subtotalSinImpuestos: Number(venta.subtotal) - Number(venta.descuento),
-      descuento: Number(venta.descuento), iva: Number(venta.iva), total: Number(venta.total),
-    },
+    items, totales,
+    infoAdicional: extraerInfoAdicional(venta.notaCredito.xmlFirmado),
     logo: cargarLogo(emisor.logoPath),
   })
   return { pdfBase64, numeroNC, venta }
@@ -205,5 +179,32 @@ export async function enviarNCEmailAction(ventaId: string, emailManual?: string)
   } catch (error: any) {
     await registrarLog('ERROR', 'VENTAS', `Error enviando nota de crédito: ${error.message || error}`, undefined, sesion.tenantId)
     return { error: error.message || 'No se pudo enviar la nota de crédito' }
+  }
+}
+
+/**
+ * Líneas y totales del RIDE con el MISMO cálculo que el XML enviado al SRI
+ * (lib/ventas/totales.ts: tarifa de IVA por producto y descuento prorrateado).
+ * Antes los subtotales por tarifa se calculaban sin descuento y el IVA/total se
+ * tomaban de la venta: con descuento, el PDF podía no coincidir con el XML.
+ */
+function datosRide(venta: {
+  descuento: unknown
+  items: { productoId: string; cantidad: unknown; precioUnitario: unknown; producto: { nombre: string; ivaPorcentaje: unknown } }[]
+}) {
+  const calc = calcularVenta(
+    venta.items.map((it) => ({ cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje) })),
+    Number(venta.descuento),
+  )
+  const baseDe = (gravada: boolean) => calc.porTarifa.filter((t) => (t.tarifa > 0) === gravada).reduce((a, t) => a + t.base, 0)
+  return {
+    items: venta.items.map((it, i) => ({
+      codigo: it.productoId.slice(-6), descripcion: it.producto.nombre, cantidad: Number(it.cantidad),
+      precioUnitario: Number(it.precioUnitario), descuento: calc.lineas[i].descuento, subtotal: calc.lineas[i].base,
+    })),
+    totales: {
+      subtotal15: baseDe(true), subtotal0: baseDe(false), subtotalSinImpuestos: calc.base,
+      descuento: calc.descuento, iva: calc.iva, total: calc.total,
+    },
   }
 }

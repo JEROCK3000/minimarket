@@ -41,6 +41,8 @@ export interface NotaCreditoInput {
     codigoPorcentaje: string; tarifa: string
     baseImponible: string; valorImpuesto: string
   }[]
+  /** Campos adicionales (p. ej. "RUC Proveedor", Res. SRI NAC-DGERCGC26-00000027) */
+  infoAdicional?: { nombre: string; valor: string }[]
 }
 
 /**
@@ -114,5 +116,9 @@ export function generarXmlNotaCredito(d: NotaCreditoInput): string {
     `<motivo>${esc(inc.motivo)}</motivo>` +
     `</infoNotaCredito>` +
     `<detalles>${detalles}</detalles>` +
+    // infoAdicional va después de <detalles> (XSD notaCredito v1.1.0)
+    (d.infoAdicional && d.infoAdicional.length
+      ? `<infoAdicional>${d.infoAdicional.map((c) => `<campoAdicional nombre="${esc(c.nombre)}">${esc(c.valor)}</campoAdicional>`).join('')}</infoAdicional>`
+      : '') +
     `</notaCredito>`
 }

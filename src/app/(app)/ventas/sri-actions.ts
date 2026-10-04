@@ -12,6 +12,7 @@ import { ENDPOINTS_SRI, mapTipoIdentificacion, generarClaveAcceso, envolverFactu
 import { compradorDeVenta } from '@/lib/ventas/comprador'
 import { calcularVenta } from '@/lib/ventas/totales'
 import { codigoPorcentajeIva, formaPagoSri } from '@/lib/sri/impuestos'
+import { camposAdicionalesEmision } from '@/lib/sri/info-adicional'
 
 /**
  * Emite la factura electrónica de una venta al SRI.
@@ -127,7 +128,17 @@ export async function emitirFacturaVentaAction(ventaId: string) {
       secuencial,
     })
 
-    const invoice = envolverFactura(invoiceInput, accessKey)
+    // Información adicional: "RUC Proveedor" (Res. SRI NAC-DGERCGC26-00000027).
+    const adicionales = camposAdicionalesEmision()
+    if (adicionales.length === 0) {
+      await registrarLog('WARN', 'VENTAS', 'SRI_RUC_PROVEEDOR no configurado: la factura se emite sin el campo "RUC Proveedor"', undefined, sesion.tenantId)
+    }
+    const invoice = envolverFactura(
+      adicionales.length
+        ? { ...invoiceInput, infoAdicional: { campoAdicional: adicionales.map((c) => ({ '@nombre': c.nombre, '#': c.valor })) } }
+        : invoiceInput,
+      accessKey,
+    )
     const xml = generateInvoiceXml(invoice)
     const cleanedXml = xml
       .replace(' xmlns:ds="http://www.w3.org/2000/09/xmldsig#"', '')

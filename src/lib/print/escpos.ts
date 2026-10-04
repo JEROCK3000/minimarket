@@ -108,6 +108,8 @@ export interface DatosFacturaTicket {
   numeroAutorizacion: string | null
   fechaAutorizacion: string | null
   claveAcceso: string
+  /** Campos adicionales del XML autorizado (p. ej. "RUC Proveedor", Res. SRI NAC-DGERCGC26-00000027) */
+  infoAdicional?: { nombre: string; valor: string }[]
 }
 
 export interface DatosTicketVenta {
@@ -180,6 +182,14 @@ export function ticketFactura(d: DatosFacturaTicket): Buffer {
   out += bloqueDetalle(d.items, d.totales)
   out += bloqueTotales(d.totales) + separador()
   out += bloquePago(NOMBRE_FORMA_PAGO_SRI[d.formaPagoSri] ?? d.formaPagoSri, d.totales.total, d.pagoCon)
+
+  // Información adicional (igual que RideEscPosBase::bloqueInfoAdicional de ecofacturacion)
+  const adicionales = (d.infoAdicional ?? []).filter((c) => c.valor)
+  if (adicionales.length) {
+    out += NEGRITA_ON + 'INFORMACION ADICIONAL\n' + NEGRITA_OFF
+    for (const c of adicionales) out += envolver(`${c.nombre}: ${c.valor}`)
+    out += separador()
+  }
 
   out += CENTRO + 'No. AUTORIZACION:\n'
   out += NEGRITA_ON + envolver(d.numeroAutorizacion || d.claveAcceso) + NEGRITA_OFF

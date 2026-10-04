@@ -10,6 +10,7 @@ import { formaPagoSri } from '@/lib/sri/impuestos'
 import { ticketFactura, ticketVenta, ticketPrueba, etiquetasPrecio } from '@/lib/print/escpos'
 import { redondear2 } from '@/lib/ventas/totales'
 import { leerIpImpresora, ipValida } from '@/lib/print/impresora-config'
+import { extraerInfoAdicional } from '@/lib/sri/info-adicional'
 
 export type ResultadoTicketTermico =
   | { success: true; datosBase64: string; ip: string; tipo: 'FACTURA' | 'TICKET' }
@@ -64,6 +65,7 @@ export async function ticketTermicoAction(ventaId: string): Promise<ResultadoTic
         numeroAutorizacion: venta.factura.numeroAutorizacion,
         fechaAutorizacion: venta.factura.fechaAutorizacion ? format(venta.factura.fechaAutorizacion, 'dd/MM/yyyy HH:mm:ss') : null,
         claveAcceso: ca,
+        infoAdicional: extraerInfoAdicional(venta.factura.xmlFirmado),
       })
       return { success: true, datosBase64: bytes.toString('base64'), ip, tipo: 'FACTURA' }
     }

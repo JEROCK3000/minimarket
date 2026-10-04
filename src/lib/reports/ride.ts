@@ -17,6 +17,8 @@ export interface RideData {
   items: { codigo: string; descripcion: string; cantidad: number; precioUnitario: number; descuento: number; subtotal: number }[]
   totales: { subtotal15: number; subtotal0: number; subtotalSinImpuestos: number; descuento: number; iva: number; total: number }
   logo?: { base64: string; formato: 'PNG' | 'JPEG' } | null
+  /** Campos adicionales del XML autorizado (p. ej. "RUC Proveedor", Res. SRI NAC-DGERCGC26-00000027) */
+  infoAdicional?: { nombre: string; valor: string }[]
 }
 
 const MORADO: [number, number, number] = [124, 77, 158]
@@ -169,6 +171,23 @@ export function generarRidePDF(d: RideData): string {
   doc.setTextColor(50); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5)
   doc.text(formaPagoTexto(d.factura.formaPago), M + 2, py + 11, { maxWidth: 62 })
   doc.text(money(d.totales.total), M + 70, py + 11)
+
+  // Información adicional (debajo de la forma de pago), tal como va en el XML autorizado
+  const adicionales = (d.infoAdicional ?? []).filter((c) => c.valor)
+  if (adicionales.length) {
+    const iy = py + 21
+    const alto = 6 + adicionales.length * 5 + 2
+    doc.setDrawColor(180); doc.rect(M, iy, 92, alto)
+    doc.setFillColor(...MORADO); doc.rect(M, iy, 92, 6, 'F')
+    doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
+    doc.text('Información Adicional', M + 2, iy + 4)
+    doc.setTextColor(50); doc.setFontSize(7.5)
+    adicionales.forEach((c, i) => {
+      const y = iy + 11 + i * 5
+      doc.setFont('helvetica', 'bold'); doc.text(`${c.nombre}:`, M + 2, y)
+      doc.setFont('helvetica', 'normal'); doc.text(c.valor, M + 36, y, { maxWidth: 54 })
+    })
+  }
 
   // Totales
   const tX = 120, vX = M + W

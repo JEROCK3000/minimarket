@@ -13,6 +13,7 @@ import { generarXmlNotaCredito } from '@/lib/sri/nota-credito'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
 import { calcularVenta } from '@/lib/ventas/totales'
 import { codigoPorcentajeIva } from '@/lib/sri/impuestos'
+import { camposAdicionalesEmision } from '@/lib/sri/info-adicional'
 
 /**
  * Emite una Nota de Crédito que anula por completo una factura autorizada.
@@ -117,6 +118,8 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
           valorImpuesto: l.iva.toFixed(2),
         }
       }),
+      // "RUC Proveedor" (Res. SRI NAC-DGERCGC26-00000027)
+      infoAdicional: camposAdicionalesEmision(),
     })
 
     // Firmar
