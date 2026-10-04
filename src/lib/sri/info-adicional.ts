@@ -8,21 +8,28 @@
  * Mismo criterio que ecofacturacion (Sri/ProcesadorLocal.php) y SmartianERP.
  *
  * El RUC es el de Solinteec (proveedor del software), igual para todos los
- * negocios: va en la variable de entorno SRI_RUC_PROVEEDOR del servidor, NO en
- * el emisor. Sin valor (o inválido) el campo se omite y la facturación sigue.
+ * negocios: configuración GLOBAL que edita el SUPERADMIN en
+ * /superadmin/configuracion (tabla config, tenantId NULL), NO el emisor. Sin
+ * valor (o inválido) el campo se omite y la facturación sigue.
  */
+import { leerConfigGlobal, CLAVE_RUC_PROVEEDOR } from '@/lib/config/global'
+
 export const NOMBRE_RUC_PROVEEDOR = 'RUC Proveedor'
 
 export interface CampoAdicional { nombre: string; valor: string }
 
-export function rucProveedorSoftware(): string | null {
-  const ruc = (process.env.SRI_RUC_PROVEEDOR || '').trim()
-  return /^\d{13}$/.test(ruc) ? ruc : null
+export async function rucProveedorSoftware(): Promise<string | null> {
+  try {
+    const ruc = ((await leerConfigGlobal(CLAVE_RUC_PROVEEDOR)) || '').trim()
+    return /^\d{13}$/.test(ruc) ? ruc : null
+  } catch {
+    return null // nunca interrumpir la facturación por esta consulta
+  }
 }
 
 /** Campos adicionales a incluir al EMITIR un comprobante (hoy: RUC Proveedor). */
-export function camposAdicionalesEmision(): CampoAdicional[] {
-  const ruc = rucProveedorSoftware()
+export async function camposAdicionalesEmision(): Promise<CampoAdicional[]> {
+  const ruc = await rucProveedorSoftware()
   return ruc ? [{ nombre: NOMBRE_RUC_PROVEEDOR, valor: ruc }] : []
 }
 

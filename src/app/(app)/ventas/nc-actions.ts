@@ -119,7 +119,7 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
         }
       }),
       // "RUC Proveedor" (Res. SRI NAC-DGERCGC26-00000027)
-      infoAdicional: camposAdicionalesEmision(),
+      infoAdicional: await camposAdicionalesEmision(),
     })
 
     // Firmar

@@ -129,9 +129,9 @@ export async function emitirFacturaVentaAction(ventaId: string) {
     })
 
     // Información adicional: "RUC Proveedor" (Res. SRI NAC-DGERCGC26-00000027).
-    const adicionales = camposAdicionalesEmision()
+    const adicionales = await camposAdicionalesEmision()
     if (adicionales.length === 0) {
-      await registrarLog('WARN', 'VENTAS', 'SRI_RUC_PROVEEDOR no configurado: la factura se emite sin el campo "RUC Proveedor"', undefined, sesion.tenantId)
+      await registrarLog('WARN', 'VENTAS', 'RUC Proveedor no configurado (Superadmin → Configuración): la factura se emite sin ese campo', undefined, sesion.tenantId)
     }
     const invoice = envolverFactura(
       adicionales.length

@@ -9,6 +9,8 @@ import { usaControlCaja } from '@/lib/config/negocio'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const sesion = await obtenerSesion()
   if (!sesion) redirect('/login')
+  // El superadmin global no opera un minimarket: su lugar es el panel Solinteec.
+  if (sesion.rol === 'SUPERADMIN' && !sesion.tenantId) redirect('/superadmin')
 
   const tenant = sesion.tenantId
     ? await prisma.tenant.findUnique({ where: { id: sesion.tenantId }, select: { nombre: true } })
