@@ -71,6 +71,16 @@ export async function loginAction(_prev: { error: string }, formData: FormData) 
 
     intentos.delete(email)
 
+    // Minimarket cancelado o desactivado: no se inicia sesión (la contraseña ya
+    // se verificó, así que el mensaje no revela si el correo existe).
+    if (usuario.tenantId) {
+      const tenant = await prisma.tenant.findUnique({ where: { id: usuario.tenantId }, select: { estado: true, activo: true } })
+      if (!tenant || !tenant.activo || tenant.estado === 'CANCELADO') {
+        await registrarLog('SECURITY', 'AUTH', `Login rechazado (negocio inactivo): ${email}`, undefined, usuario.tenantId)
+        return { error: 'La cuenta de tu negocio está inactiva. Contacta a Solinteec.' }
+      }
+    }
+
     const token = await crearToken({
       sub: usuario.id,
       tenantId: usuario.tenantId,

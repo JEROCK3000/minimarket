@@ -14,6 +14,7 @@ import { compradorDeVenta } from '@/lib/ventas/comprador'
 import { calcularVenta } from '@/lib/ventas/totales'
 import { codigoPorcentajeIva } from '@/lib/sri/impuestos'
 import { camposAdicionalesEmision } from '@/lib/sri/info-adicional'
+import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
 /**
  * Emite una Nota de Crédito que anula por completo una factura autorizada.
@@ -21,6 +22,10 @@ import { camposAdicionalesEmision } from '@/lib/sri/info-adicional'
  */
 export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
   const sesion = await requerirTenant('ADMIN') // solo el dueño emite NC
+  {
+    const bloqueo = await bloqueoPorSuscripcion(sesion.tenantId)
+    if (bloqueo) return { error: bloqueo }
+  }
 
   const motivoLimpio = (motivo || '').trim()
   if (motivoLimpio.length < 3) return { error: 'Indica el motivo de la nota de crédito' }

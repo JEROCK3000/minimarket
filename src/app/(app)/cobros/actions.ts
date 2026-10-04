@@ -6,6 +6,7 @@ import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { redondear2 } from '@/lib/ventas/totales'
+import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
 export interface VentaPendiente { id: string; numero: string; fecha: string; total: number; saldo: number; vence: string | null; vencida: boolean }
 export interface AbonoRow { id: string; fecha: string; monto: number; formaPago: string; venta: string; usuario: string | null; notas: string | null }
@@ -62,6 +63,10 @@ const abonoSchema = z.object({
  */
 export async function registrarAbonoAction(data: { clienteId: string; monto: number; formaPago: string; notas?: string }) {
   const sesion = await requerirTenant()
+  {
+    const bloqueo = await bloqueoPorSuscripcion(sesion.tenantId)
+    if (bloqueo) return { error: bloqueo }
+  }
   const parsed = abonoSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data

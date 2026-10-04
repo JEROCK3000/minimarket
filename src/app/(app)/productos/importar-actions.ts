@@ -6,6 +6,7 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
 const TAMANO_MAXIMO = 2 * 1024 * 1024 // 2 MB
 const FILAS_MAXIMAS = 2000
@@ -72,6 +73,10 @@ export interface ResultadoImportacion {
  */
 export async function importarProductosAction(formData: FormData): Promise<ResultadoImportacion | { error: string }> {
   const sesion = await requerirTenant('ADMIN')
+  {
+    const bloqueo = await bloqueoPorSuscripcion(sesion.tenantId)
+    if (bloqueo) return { error: bloqueo }
+  }
   const archivo = formData.get('archivo')
   if (!(archivo instanceof File)) return { error: 'Selecciona un archivo .xlsx' }
   if (archivo.size === 0 || archivo.size > TAMANO_MAXIMO) return { error: 'El archivo debe pesar menos de 2 MB' }
@@ -134,6 +139,7 @@ export async function importarProductosAction(formData: FormData): Promise<Resul
     const d = parsed.data
     if (nombres.has(normalizar(d.nombre))) { resultado.omitidos.push({ fila: n, nombre: d.nombre, motivo: 'ya existe un producto con ese nombre' }); continue }
     if (d.codigoBarras && codigos.has(d.codigoBarras)) { resultado.omitidos.push({ fila: n, nombre: d.nombre, motivo: 'ya existe ese código de barras' }); continue }
+    if (await limiteDelPlan(sesion.tenantId, 'productos')) { resultado.omitidos.push({ fila: n, nombre: d.nombre, motivo: 'límite de productos de tu plan' }); continue }
 
     try {
       let categoriaId: string | null = null

@@ -7,6 +7,7 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
 /**
  * Gestión de usuarios del minimarket (solo ADMIN, siempre dentro de su tenant).
@@ -39,6 +40,10 @@ async function quedaOtroAdmin(tenantId: string, excluirId: string) {
 
 export async function crearUsuarioAction(data: UsuarioFormValues) {
   const sesion = await requerirTenant('ADMIN')
+  {
+    const bloqueo = (await bloqueoPorSuscripcion(sesion.tenantId)) ?? (await limiteDelPlan(sesion.tenantId, 'usuarios'))
+    if (bloqueo) return { error: bloqueo }
+  }
   const parsed = usuarioSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data
@@ -90,6 +95,10 @@ export async function cambiarEstadoUsuarioAction(id: string, activo: boolean) {
   if (!u) return { error: 'Usuario no encontrado' }
   if (!activo && u.rol === 'ADMIN' && !(await quedaOtroAdmin(sesion.tenantId, id))) {
     return { error: 'Debe quedar al menos un administrador activo' }
+  }
+  if (activo && !u.activo) {
+    const limite = await limiteDelPlan(sesion.tenantId, 'usuarios')
+    if (limite) return { error: limite }
   }
   await prisma.usuario.update({ where: { id }, data: { activo: Boolean(activo) } })
   await registrarLog('AUDIT', 'USUARIOS', `Usuario ${activo ? 'activado' : 'desactivado'}: ${u.email} por ${sesion.email}`, undefined, sesion.tenantId)

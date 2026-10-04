@@ -6,6 +6,7 @@ import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { moverStock } from '@/lib/inventario/movimientos'
+import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
 // ─── Proveedores ──────────────────────────────────────────────────────────────
 const proveedorSchema = z.object({
@@ -67,6 +68,10 @@ export interface CompraFormValues {
 
 export async function crearCompraAction(data: CompraFormValues) {
   const sesion = await requerirTenant('ADMIN')
+  {
+    const bloqueo = await bloqueoPorSuscripcion(sesion.tenantId)
+    if (bloqueo) return { error: bloqueo }
+  }
   const parsed = compraSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data

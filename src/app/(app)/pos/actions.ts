@@ -11,6 +11,7 @@ import { DIAS_CREDITO } from '@/lib/sri/impuestos'
 import { CONSUMIDOR_FINAL } from '@/lib/clientes/identificacion'
 import { cajaAbierta } from '@/lib/caja/estado'
 import { usaControlCaja } from '@/lib/config/negocio'
+import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
 const ventaSchema = z.object({
   clienteId: z.string().optional().or(z.literal('')),
@@ -36,6 +37,10 @@ export interface VentaFormValues {
 export async function registrarVentaAction(data: VentaFormValues) {
   // Cajeros (USER) también venden: requiere sesión con tenant, sin exigir ADMIN
   const sesion = await requerirTenant()
+  {
+    const bloqueo = await bloqueoPorSuscripcion(sesion.tenantId)
+    if (bloqueo) return { error: bloqueo }
+  }
   const parsed = ventaSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data

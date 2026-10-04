@@ -13,6 +13,7 @@ import { compradorDeVenta } from '@/lib/ventas/comprador'
 import { calcularVenta } from '@/lib/ventas/totales'
 import { codigoPorcentajeIva, formaPagoSri } from '@/lib/sri/impuestos'
 import { camposAdicionalesEmision } from '@/lib/sri/info-adicional'
+import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
 /**
  * Emite la factura electrónica de una venta al SRI.
@@ -21,6 +22,10 @@ import { camposAdicionalesEmision } from '@/lib/sri/info-adicional'
  */
 export async function emitirFacturaVentaAction(ventaId: string) {
   const sesion = await requerirTenant()
+  {
+    const bloqueo = (await bloqueoPorSuscripcion(sesion.tenantId)) ?? (await limiteDelPlan(sesion.tenantId, 'facturasMes', 1))
+    if (bloqueo) return { error: bloqueo }
+  }
 
   try {
     const venta = await prisma.venta.findFirst({

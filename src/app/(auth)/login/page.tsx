@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { estaAutenticado } from '@/lib/auth/jwt'
 import { LoginForm } from './LoginForm'
 
@@ -20,7 +21,8 @@ export default async function LoginPage() {
         <div className="card">
           <LoginForm />
         </div>
-        <p className="text-center text-xs text-gray-400 mt-6">© {new Date().getFullYear()} Solinteec</p>
+        <p className="text-center text-sm text-gray-500 mt-6">¿Tienes un minimarket? <Link href="/registro" className="text-brand-600 dark:text-brand-400 font-semibold hover:underline">Regístralo aquí</Link></p>
+        <p className="text-center text-xs text-gray-400 mt-3">© {new Date().getFullYear()} Solinteec</p>
       </div>
     </main>
   )

@@ -9,6 +9,8 @@ import { prisma } from '@/lib/db/prisma'
  * MySQL, por eso se lee/escribe con findFirst en vez de upsert.
  */
 export const CLAVE_RUC_PROVEEDOR = 'ruc_proveedor_software'
+/** Instrucciones de pago que ve quien se registra (banco, cuenta, titular…). */
+export const CLAVE_DATOS_PAGO = 'datos_pago_suscripcion'
 
 export async function leerConfigGlobal(clave: string): Promise<string | null> {
   const fila = await prisma.config.findFirst({ where: { tenantId: null, clave }, orderBy: { updatedAt: 'desc' }, select: { valor: true } })

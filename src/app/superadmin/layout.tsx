@@ -22,9 +22,11 @@ export default async function SuperadminLayout({ children }: { children: React.R
         <div className="max-w-5xl mx-auto h-full px-4 flex items-center gap-3">
           <ShieldCheck size={20} className="text-brand-600 shrink-0" />
           <span className="font-black text-gray-900 dark:text-white hidden sm:inline">Panel Solinteec</span>
-          <nav className="flex gap-1 ml-2">
+          <nav className="flex gap-1 ml-2 overflow-x-auto">
             <Link href="/superadmin" className={enlace}>Minimarkets</Link>
-            <Link href="/superadmin/configuracion" className={enlace}>Configuración global</Link>
+            <Link href="/superadmin/solicitudes" className={enlace}>Solicitudes</Link>
+            <Link href="/superadmin/planes" className={enlace}>Planes</Link>
+            <Link href="/superadmin/configuracion" className={enlace}>Configuración</Link>
           </nav>
           <form action={logoutAction} className="ml-auto">
             <button type="submit" className="btn-ghost h-9 px-3 text-xs" title="Cerrar sesión"><LogOut size={14} /> Salir</button>

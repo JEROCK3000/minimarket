@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FileText, Mail, KeyRound, Printer, SlidersHorizontal } from 'lucide-react'
+import { FileText, Mail, KeyRound, Printer, SlidersHorizontal, BadgeCheck } from 'lucide-react'
 
 const TABS = [
   { href: '/configuracion', label: 'Facturación SRI', icon: FileText },
@@ -10,6 +10,7 @@ const TABS = [
   { href: '/configuracion/operacion', label: 'Operación', icon: SlidersHorizontal },
   { href: '/configuracion/impresora', label: 'Impresora', icon: Printer },
   { href: '/configuracion/seguridad', label: 'Seguridad', icon: KeyRound },
+  { href: '/configuracion/suscripcion', label: 'Suscripción', icon: BadgeCheck },
 ]
 
 export function ConfigTabs() {

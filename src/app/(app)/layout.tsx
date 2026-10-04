@@ -5,6 +5,8 @@ import { prisma } from '@/lib/db/prisma'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { LogOut } from 'lucide-react'
 import { usaControlCaja } from '@/lib/config/negocio'
+import { obtenerSuscripcion } from '@/lib/saas/suscripcion'
+import { AvisoSuscripcion } from '@/components/layout/AvisoSuscripcion'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const sesion = await obtenerSesion()
@@ -16,6 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? await prisma.tenant.findUnique({ where: { id: sesion.tenantId }, select: { nombre: true } })
     : null
   const usarCaja = sesion.tenantId ? await usaControlCaja(sesion.tenantId) : true
+  const suscripcion = sesion.tenantId ? await obtenerSuscripcion(sesion.tenantId) : null
   const nombreTenant = tenant?.nombre || process.env.NEXT_PUBLIC_APP_NAME || 'MiniMarket'
 
   return (
@@ -34,6 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </button>
           </form>
         </header>
+        {suscripcion && <AvisoSuscripcion s={suscripcion} />}
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
       </div>

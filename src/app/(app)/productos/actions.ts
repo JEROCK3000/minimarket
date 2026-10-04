@@ -6,6 +6,7 @@ import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { guardarImagenProducto, eliminarArchivo, ErrorImagen } from '@/lib/productos/imagenes'
+import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
 const productoSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es requerido').max(150),
@@ -36,6 +37,10 @@ export interface ProductoFormValues {
 // ─── Crear ────────────────────────────────────────────────────────────────────
 export async function crearProductoAction(data: ProductoFormValues) {
   const sesion = await requerirTenant('ADMIN')
+  {
+    const bloqueo = (await bloqueoPorSuscripcion(sesion.tenantId)) ?? (await limiteDelPlan(sesion.tenantId, 'productos'))
+    if (bloqueo) return { error: bloqueo }
+  }
   const parsed = productoSchema.safeParse(data)
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
@@ -86,6 +91,10 @@ export async function crearProductoAction(data: ProductoFormValues) {
 // ─── Actualizar ─────────────────────────────────────────────────────────────
 export async function actualizarProductoAction(id: string, data: ProductoFormValues) {
   const sesion = await requerirTenant('ADMIN')
+  {
+    const bloqueo = await bloqueoPorSuscripcion(sesion.tenantId)
+    if (bloqueo) return { error: bloqueo }
+  }
   const parsed = productoSchema.safeParse(data)
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }

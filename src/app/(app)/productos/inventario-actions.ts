@@ -6,6 +6,7 @@ import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { moverStock } from '@/lib/inventario/movimientos'
+import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
 export interface MovimientoKardex {
   id: string
@@ -60,6 +61,10 @@ export type AjusteStockValues = z.infer<typeof ajusteSchema>
  */
 export async function ajustarStockAction(data: AjusteStockValues) {
   const sesion = await requerirTenant('ADMIN')
+  {
+    const bloqueo = await bloqueoPorSuscripcion(sesion.tenantId)
+    if (bloqueo) return { error: bloqueo }
+  }
   const parsed = ajusteSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data

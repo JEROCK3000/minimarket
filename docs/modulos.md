@@ -70,5 +70,11 @@ Portada de GABLIMADOS (en producción real), adaptada a `Venta` y multitenant, c
 - **ADMIN** (dueño): gestiona todo.
 - **USER** (cajero): POS y consulta; no edita productos, compras, gastos ni anula.
 
+## SaaS: planes, suscripciones y registro
+- `/registro` (público): solicitud de alta con plan, datos del negocio y del ADMIN; enlace privado para subir el comprobante y ver el estado.
+- `/superadmin`: minimarkets (estado efectivo, plan, vencimiento), alta manual, detalle (plan, pagos, vencimiento, suspender/cancelar, usuarios), `/superadmin/solicitudes` (verificar pago, aprobar, rechazar), `/superadmin/planes`, `/superadmin/configuracion` (RUC Proveedor, datos de pago, contraseña).
+- Estados: PRUEBA/ACTIVO/CANCELADO guardados; GRACIA (3 días) y SUSPENDIDO calculados. Suspendido = solo lectura. Límites por plan en usuarios, productos y facturas del mes.
+- ADMIN del minimarket: Configuración → Suscripción.
+
 ## Pendientes (siguiente iteración)
 Historial de cierres de caja exportable; considerar hacer privado el repositorio.
