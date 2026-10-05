@@ -15,13 +15,22 @@ import { emitirFacturaVentaAction } from '../ventas/sri-actions'
 import { calcularVenta } from '@/lib/ventas/totales'
 import { urlImagenProducto } from '@/lib/productos/url'
 import { leerEtiquetaBalanza, mismoPlu, type ConfigBalanza } from '@/lib/pos/balanza'
+import { precioUnitarioPara, type Escala } from '@/lib/ventas/presentaciones'
 
 interface Prod {
   id: string; nombre: string; codigoBarras: string | null; codigoBalanza?: string | null; categoriaNombre: string | null
   precioVenta: number; ivaPorcentaje: number; stock: number; unidad: string; imagen?: string | null
+  presentaciones?: Presentacion[]; escalas?: Escala[]
 }
+interface Presentacion { id: string; nombre: string; factor: number; codigoBarras: string | null; precioVenta: number }
 interface Cat { id: string; nombre: string; icono: string | null }
-interface ItemCarrito extends Prod { cantidad: number }
+// Una línea por producto + presentación (la unidad suelta es pres = null)
+interface ItemCarrito extends Prod { key: string; cantidad: number; pres: Presentacion | null }
+/** Precio (sin IVA) de la línea: el de la presentación o el de la escala por mayor alcanzada. */
+const precioLinea = (it: ItemCarrito) => (it.pres ? it.pres.precioVenta : precioUnitarioPara(it.precioVenta, it.escalas ?? [], it.cantidad))
+/** Unidades del producto ya en el carrito (todas sus presentaciones), sin contar la línea `excepto`. */
+const unidadesEnCarrito = (c: ItemCarrito[], productoId: string, excepto?: string) =>
+  c.filter((it) => it.id === productoId && it.key !== excepto).reduce((s, it) => s + it.cantidad * (it.pres?.factor ?? 1), 0)
 interface ClienteSel { id: string; nombre: string; identificacion: string; telefono?: string | null; email?: string | null; direccion?: string | null }
 
 export function POSClient({ productos, categorias, cajaAbierta, balanza }: { productos: Prod[]; categorias: Cat[]; cajaAbierta: boolean; balanza: ConfigBalanza }) {
@@ -54,7 +63,7 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza }: { pro
   const [descuentoTxt, setDescuentoTxt] = useState('')
   const [descuentoEnPct, setDescuentoEnPct] = useState(false)
   const { subtotal, iva, total, descuento } = useMemo(() => {
-    const lineas = carrito.map((it) => ({ cantidad: it.cantidad, precioUnitario: it.precioVenta, ivaPorcentaje: it.ivaPorcentaje }))
+    const lineas = carrito.map((it) => ({ cantidad: it.cantidad, precioUnitario: precioLinea(it), ivaPorcentaje: it.ivaPorcentaje }))
     const bruto = calcularVenta(lineas, 0).subtotal
     const valor = Math.max(0, Number(descuentoTxt) || 0)
     const monto = descuentoEnPct ? (bruto * Math.min(valor, 100)) / 100 : Math.min(valor, bruto)
@@ -64,34 +73,38 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza }: { pro
   const vuelto = pagoCon ? Math.max(0, Number(pagoCon) - total) : 0
 
   const r3 = (n: number) => Math.round(n * 1000) / 1000
-  const agregar = (p: Prod, cantidad = 1) => {
+  const [elegirPres, setElegirPres] = useState<Prod | null>(null)
+  const agregar = (p: Prod, cantidad = 1, pres: Presentacion | null = null) => {
+    const key = `${p.id}|${pres?.id ?? ''}`
+    const factor = pres?.factor ?? 1
     setCarrito((c) => {
-      const existe = c.find((it) => it.id === p.id)
-      const enCarrito = existe?.cantidad ?? 0
-      if (enCarrito + cantidad > p.stock + 1e-9) { toast.error(`Sin stock suficiente de ${p.nombre} (hay ${p.stock})`); return c }
-      if (existe) return c.map((it) => (it.id === p.id ? { ...it, cantidad: r3(it.cantidad + cantidad) } : it))
-      return [...c, { ...p, cantidad: r3(cantidad) }]
+      if (unidadesEnCarrito(c, p.id) + cantidad * factor > p.stock + 1e-9) { toast.error(`Sin stock suficiente de ${p.nombre} (hay ${p.stock})`); return c }
+      const existe = c.find((it) => it.key === key)
+      if (existe) return c.map((it) => (it.key === key ? { ...it, cantidad: r3(it.cantidad + cantidad) } : it))
+      return [...c, { ...p, key, pres, cantidad: r3(cantidad) }]
     })
   }
+  /** Toca un producto: si tiene presentaciones, pregunta cuál. */
+  const tocar = (p: Prod) => (p.presentaciones?.length ? setElegirPres(p) : agregar(p))
   /** Cantidad escrita a mano (productos al peso, cantidades grandes). */
-  const fijarCantidad = (id: string, valor: number) => {
+  const fijarCantidad = (key: string, valor: number) => {
     setCarrito((c) => c.flatMap((it) => {
-      if (it.id !== id) return [it]
+      if (it.key !== key) return [it]
       if (!(valor > 0)) return [it]
-      if (valor > it.stock + 1e-9) { toast.error(`Solo hay ${it.stock} de ${it.nombre}`); return [it] }
+      if (unidadesEnCarrito(c, it.id, key) + valor * (it.pres?.factor ?? 1) > it.stock + 1e-9) { toast.error(`Solo hay ${it.stock} de ${it.nombre}`); return [it] }
       return [{ ...it, cantidad: r3(valor) }]
     }))
   }
-  const cambiarCantidad = (id: string, delta: number) => {
+  const cambiarCantidad = (key: string, delta: number) => {
     setCarrito((c) => c.flatMap((it) => {
-      if (it.id !== id) return [it]
-      const nueva = it.cantidad + delta
+      if (it.key !== key) return [it]
+      const nueva = r3(it.cantidad + delta)
       if (nueva <= 0) return []
-      if (nueva > it.stock) { toast.error(`Solo hay ${it.stock} de ${it.nombre}`); return [it] }
+      if (unidadesEnCarrito(c, it.id, key) + nueva * (it.pres?.factor ?? 1) > it.stock + 1e-9) { toast.error(`Solo hay ${it.stock} de ${it.nombre}`); return [it] }
       return [{ ...it, cantidad: nueva }]
     }))
   }
-  const quitar = (id: string) => setCarrito((c) => c.filter((it) => it.id !== id))
+  const quitar = (key: string) => setCarrito((c) => c.filter((it) => it.key !== key))
 
   // Enter en búsqueda: si coincide un código de barras exacto, lo agrega (scanner)
   const onBuscarKey = (e: React.KeyboardEvent) => {
@@ -99,6 +112,11 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza }: { pro
     const code = busqueda.trim()
     const exacto = productos.find((p) => p.codigoBarras === code)
     if (exacto) { agregar(exacto); setBusqueda(''); return }
+    // Código de una presentación (six-pack, caja…)
+    for (const p of productos) {
+      const pres = p.presentaciones?.find((x) => x.codigoBarras === code)
+      if (pres) { agregar(p, 1, pres); setBusqueda(''); return }
+    }
     // Etiqueta de balanza: 2x + PLU + peso/precio (Configuración → Operación)
     const etiqueta = leerEtiquetaBalanza(code, balanza)
     if (etiqueta) {
@@ -110,7 +128,7 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza }: { pro
       agregar(prod, cantidad); setBusqueda('')
       return
     }
-    if (filtrados.length === 1) { agregar(filtrados[0]); setBusqueda('') }
+    if (filtrados.length === 1) { tocar(filtrados[0]); setBusqueda('') }
   }
 
   const limpiar = () => {
@@ -137,7 +155,7 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza }: { pro
         requiereFactura,
         pagoCon: pagoCon ? Number(pagoCon) : undefined,
         descuento,
-        items: carrito.map((it) => ({ productoId: it.id, cantidad: it.cantidad })),
+        items: carrito.map((it) => ({ productoId: it.id, cantidad: it.cantidad, presentacionId: it.pres?.id })),
       })
       if (res.success) {
         setUltimaVenta(res.venta)
@@ -183,7 +201,7 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza }: { pro
             return (
               <button
                 key={p.id}
-                onClick={() => agregar(p)}
+                onClick={() => tocar(p)}
                 disabled={agotado}
                 className="card p-3 text-left hover:border-brand-500 hover:shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -219,18 +237,19 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza }: { pro
           {carrito.length === 0 ? (
             <p className="text-center text-sm text-gray-400 py-8">Toca un producto para agregarlo</p>
           ) : carrito.map((it) => (
-            <div key={it.id} className="flex items-center gap-2 text-sm">
+            <div key={it.key} className="flex items-center gap-2 text-sm">
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-900 dark:text-white truncate">{it.nombre}</p>
-                <p className="text-xs text-gray-400">{money(it.precioVenta)} c/u{it.ivaPorcentaje > 0 ? ` + IVA ${it.ivaPorcentaje}%` : ''}</p>
+                {it.pres && <p className="text-[11px] font-semibold text-brand-600 dark:text-brand-400">{it.pres.nombre} · {it.pres.factor} {it.unidad}</p>}
+                <p className="text-xs text-gray-400">{money(precioLinea(it))} c/u{it.ivaPorcentaje > 0 ? ` + IVA ${it.ivaPorcentaje}%` : ''}{!it.pres && precioLinea(it) < it.precioVenta - 1e-9 && <span className="text-emerald-600 dark:text-emerald-400 font-semibold"> · por mayor</span>}</p>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => cambiarCantidad(it.id, -1)} className="p-1 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"><Minus size={13} /></button>
-                <CantidadEditable valor={it.cantidad} onCambiar={(v) => fijarCantidad(it.id, v)} etiqueta={`Cantidad de ${it.nombre}`} />
-                <button onClick={() => cambiarCantidad(it.id, 1)} className="p-1 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"><Plus size={13} /></button>
+                <button onClick={() => cambiarCantidad(it.key, -1)} className="p-1 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"><Minus size={13} /></button>
+                <CantidadEditable valor={it.cantidad} onCambiar={(v) => fijarCantidad(it.key, v)} etiqueta={`Cantidad de ${it.nombre}`} />
+                <button onClick={() => cambiarCantidad(it.key, 1)} className="p-1 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"><Plus size={13} /></button>
               </div>
-              <span className="w-16 text-right font-semibold text-gray-900 dark:text-white">{money(it.cantidad * it.precioVenta)}</span>
-              <button onClick={() => quitar(it.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
+              <span className="w-16 text-right font-semibold text-gray-900 dark:text-white">{money(it.cantidad * precioLinea(it))}</span>
+              <button onClick={() => quitar(it.key)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
             </div>
           ))}
         </div>
@@ -319,6 +338,25 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza }: { pro
 
       {ultimaVenta && <VentaExitosa venta={ultimaVenta} onClose={() => setUltimaVenta(null)} />}
       {cajaCerrada && <AbrirCajaModal onAbierta={() => setCajaCerrada(false)} />}
+      {elegirPres && (
+        <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/50" onClick={() => { setElegirPres(null); buscarRef.current?.focus() }}>
+          <div className="w-full max-w-sm bg-white dark:bg-[#0f0f1e] rounded-2xl shadow-xl p-5 space-y-3" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`Presentación de ${elegirPres.nombre}`}>
+            <p className="font-bold text-gray-900 dark:text-white">{elegirPres.nombre}</p>
+            {[null, ...(elegirPres.presentaciones ?? [])].map((pr) => {
+              const precio = pr ? pr.precioVenta : elegirPres.precioVenta
+              const pvp = precio * (1 + elegirPres.ivaPorcentaje / 100)
+              return (
+                <button key={pr?.id ?? 'unidad'} autoFocus={!pr} onClick={() => { agregar(elegirPres, 1, pr); setElegirPres(null); buscarRef.current?.focus() }}
+                  className="w-full flex items-center justify-between rounded-xl border border-gray-200 dark:border-white/10 px-4 py-3 hover:border-brand-500 hover:bg-brand-50/50 dark:hover:bg-brand-500/10 text-left">
+                  <span><span className="font-semibold text-gray-900 dark:text-white">{pr ? pr.nombre : `Unidad (${elegirPres.unidad})`}</span>
+                    {pr && <span className="block text-xs text-gray-500">{pr.factor} {elegirPres.unidad} · {money(pvp / pr.factor)} c/u</span>}</span>
+                  <span className="font-black text-brand-600 dark:text-brand-400">{money(pvp)}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

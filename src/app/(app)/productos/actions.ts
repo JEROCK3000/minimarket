@@ -48,6 +48,7 @@ export async function crearProductoAction(data: ProductoFormValues) {
     return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   }
   const d = parsed.data
+  if (d.codigoBarras && await codigoEnPresentacion(sesion.tenantId, d.codigoBarras)) return { error: 'Ese código de barras ya es de una presentación (six-pack, caja…)' }
 
   try {
     const producto = await prisma.producto.create({
@@ -110,6 +111,7 @@ export async function actualizarProductoAction(id: string, data: ProductoFormVal
       where: { id, tenantId: sesion.tenantId },
     })
     if (!actual) return { error: 'Producto no encontrado' }
+    if (d.codigoBarras && await codigoEnPresentacion(sesion.tenantId, d.codigoBarras)) return { error: 'Ese código de barras ya es de una presentación (six-pack, caja…)' }
 
     // Si cambió el stock manualmente, registrar ajuste en kardex
     const stockPrevio = Number(actual.stock)
@@ -263,4 +265,9 @@ export async function quitarImagenProductoAction(productoId: string) {
   revalidatePath('/productos')
   revalidatePath('/pos')
   return { success: true }
+}
+
+/** ¿El código de barras ya lo usa una presentación activa del negocio? */
+async function codigoEnPresentacion(tenantId: string, codigo: string) {
+  return !!(await prisma.productoPresentacion.findFirst({ where: { tenantId, codigoBarras: codigo, activo: true }, select: { id: true } }))
 }

@@ -261,6 +261,8 @@ model Producto {
   codigosProveedor ProductoCodigoProveedor[]
   tomaItems        TomaInventarioItem[]
   movimientos      MovimientoInventario[]
+  presentaciones   ProductoPresentacion[]
+  preciosEscala    ProductoPrecioEscala[]
 
   @@unique([tenantId, codigoBarras])
   @@unique([tenantId, codigoBalanza])
@@ -494,6 +496,11 @@ model VentaItem {
   precioUnitario Decimal  @db.Decimal(10, 4)
   subtotal       Decimal  @db.Decimal(12, 2)
   costoUnitario  Decimal? @db.Decimal(10, 4) // precio de compra al vender (utilidad real); NULL en ventas antiguas
+  // Presentación vendida (six-pack, caja…): cantidad y precio son POR PRESENTACIÓN;
+  // el stock se mueve cantidad × factor unidades. Sin presentación: factor 1.
+  presentacionId String?  @db.VarChar(40)
+  presentacion   String?  @db.VarChar(60)
+  factor         Decimal  @default(1) @db.Decimal(10, 3)
 
   devolucionItems DevolucionItem[]
 
@@ -786,4 +793,36 @@ model HistorialPrecio {
 
   @@index([tenantId, productoId, createdAt])
   @@map("historial_precios")
+}
+
+/// Presentación de venta de un producto (six-pack, caja x24): su propio código
+/// de barras y precio; al venderla el stock baja `factor` unidades del producto.
+model ProductoPresentacion {
+  id           String   @id @default(cuid())
+  tenantId     String
+  productoId   String
+  producto     Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  nombre       String   @db.VarChar(60)
+  factor       Decimal  @db.Decimal(10, 3) // unidades del producto que contiene
+  codigoBarras String?  @db.VarChar(50)
+  precioVenta  Decimal  @db.Decimal(10, 4) // sin IVA, por presentación
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, codigoBarras])
+  @@index([productoId])
+  @@map("producto_presentaciones")
+}
+
+/// Precio por mayor: desde `desde` unidades, cada unidad cuesta `precioVenta` (sin IVA).
+model ProductoPrecioEscala {
+  id          String   @id @default(cuid())
+  productoId  String
+  producto    Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  desde       Decimal  @db.Decimal(10, 3)
+  precioVenta Decimal  @db.Decimal(10, 4)
+
+  @@unique([productoId, desde])
+  @@map("producto_precios_escala")
 }

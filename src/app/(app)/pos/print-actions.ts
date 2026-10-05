@@ -11,6 +11,7 @@ import { ticketFactura, ticketVenta, ticketPrueba, etiquetasPrecio } from '@/lib
 import { redondear2 } from '@/lib/ventas/totales'
 import { leerIpImpresora, ipValida } from '@/lib/print/impresora-config'
 import { extraerInfoAdicional } from '@/lib/sri/info-adicional'
+import { descripcionItem } from '@/lib/ventas/presentaciones'
 
 export type ResultadoTicketTermico =
   | { success: true; datosBase64: string; ip: string; tipo: 'FACTURA' | 'TICKET' }
@@ -36,7 +37,7 @@ export async function ticketTermicoAction(ventaId: string): Promise<ResultadoTic
 
     const emisor = await prisma.emisorSRI.findUnique({ where: { tenantId: sesion.tenantId } })
     const items = venta.items.map((it) => ({
-      descripcion: it.producto.nombre, cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario),
+      descripcion: descripcionItem(it.producto.nombre, it.presentacion), cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario),
     }))
     const totales = calcularVenta(
       venta.items.map((it) => ({

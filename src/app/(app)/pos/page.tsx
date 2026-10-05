@@ -13,7 +13,11 @@ export default async function POSPage() {
   const [productos, categorias, apertura] = await Promise.all([
     prisma.producto.findMany({
       where: { tenantId: sesion.tenantId, activo: true, vendible: true },
-      include: { categoria: { select: { nombre: true } } },
+      include: {
+        categoria: { select: { nombre: true } },
+        presentaciones: { where: { activo: true }, orderBy: { factor: 'asc' }, select: { id: true, nombre: true, factor: true, codigoBarras: true, precioVenta: true } },
+        preciosEscala: { orderBy: { desde: 'asc' }, select: { desde: true, precioVenta: true } },
+      },
       orderBy: { nombre: 'asc' },
     }),
     prisma.categoria.findMany({
@@ -37,6 +41,8 @@ export default async function POSPage() {
     stock: Number(p.stock),
     unidad: p.unidad,
     imagen: p.imagen,
+    presentaciones: p.presentaciones.map((x) => ({ id: x.id, nombre: x.nombre, factor: Number(x.factor), codigoBarras: x.codigoBarras, precioVenta: Number(x.precioVenta) })),
+    escalas: p.preciosEscala.map((e) => ({ desde: Number(e.desde), precioVenta: Number(e.precioVenta) })),
   }))
 
   return (

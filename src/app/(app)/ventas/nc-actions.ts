@@ -9,6 +9,7 @@ import { calcularVenta } from '@/lib/ventas/totales'
 import { emitirNotaCreditoSri } from '@/lib/sri/emitir-nc'
 import { moverStock } from '@/lib/inventario/movimientos'
 import { bloqueoPorSuscripcion } from '@/lib/saas/suscripcion'
+import { descripcionItem } from '@/lib/ventas/presentaciones'
 
 /**
  * Emite una Nota de Crédito que anula por completo una factura autorizada.
@@ -62,7 +63,7 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
       detalles: venta.items.map((it, i) => {
         const l = calculo.lineas[i]
         return {
-          codigoInterno: it.productoId.slice(-6), descripcion: it.producto.nombre, cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario),
+          codigoInterno: it.productoId.slice(-6), descripcion: descripcionItem(it.producto.nombre, it.presentacion), cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario),
           descuento: l.descuento, base: l.base, ivaPorcentaje: l.ivaPorcentaje, iva: l.iva,
         }
       }),
@@ -88,7 +89,7 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
         await tx.venta.update({ where: { id: ventaId }, data: { estado: 'ANULADA', saldoPendiente: 0 } })
         for (const it of venta.items) {
           await moverStock(tx, {
-            tenantId: sesion.tenantId, productoId: it.productoId, cantidad: Number(it.cantidad), tipo: 'AJUSTE',
+            tenantId: sesion.tenantId, productoId: it.productoId, cantidad: Number(it.cantidad) * Number(it.factor), tipo: 'AJUSTE',
             motivo: `Nota de crédito ${r.numDocModificado}`, usuarioNombre: sesion.nombre,
           })
         }

@@ -25,9 +25,10 @@ export async function GET(request: NextRequest) {
       )
       v.items.forEach((it, i) => {
         const cant = Number(it.cantidad)
-        const costoU = it.costoUnitario != null ? Number(it.costoUnitario) : Number(it.producto.precioCompra)
+        // costoUnitario ya es por presentación; el respaldo (ventas antiguas) se multiplica por el factor
+        const costoU = it.costoUnitario != null ? Number(it.costoUnitario) : Number(it.producto.precioCompra) * Number(it.factor)
         const a = porProducto.get(it.productoId) ?? { nombre: it.producto.nombre, cantidad: 0, venta: 0, costo: 0, costoEstimado: false }
-        a.cantidad += cant
+        a.cantidad += cant * Number(it.factor) // en unidades del producto
         a.venta += calc.lineas[i].base
         a.costo += cant * costoU
         a.costoEstimado ||= it.costoUnitario == null
@@ -38,13 +39,13 @@ export async function GET(request: NextRequest) {
     // regresó al inventario (si volvió dañado, el costo queda como pérdida).
     const devueltos = await prisma.devolucionItem.findMany({
       where: { devolucion: { tenantId: ctx.sesion.tenantId, createdAt: { gte: desde, lte: hasta } } },
-      include: { devolucion: { select: { reingresaStock: true } }, ventaItem: { select: { costoUnitario: true, producto: { select: { nombre: true, precioCompra: true } } } } },
+      include: { devolucion: { select: { reingresaStock: true } }, ventaItem: { select: { costoUnitario: true, factor: true, producto: { select: { nombre: true, precioCompra: true } } } } },
     })
     for (const d of devueltos) {
       const cant = Number(d.cantidad)
-      const costoU = d.ventaItem.costoUnitario != null ? Number(d.ventaItem.costoUnitario) : Number(d.ventaItem.producto.precioCompra)
+      const costoU = d.ventaItem.costoUnitario != null ? Number(d.ventaItem.costoUnitario) : Number(d.ventaItem.producto.precioCompra) * Number(d.ventaItem.factor)
       const a = porProducto.get(d.productoId) ?? { nombre: d.ventaItem.producto.nombre, cantidad: 0, venta: 0, costo: 0, costoEstimado: false }
-      a.cantidad -= cant
+      a.cantidad -= cant * Number(d.ventaItem.factor)
       a.venta -= Number(d.base)
       if (d.devolucion.reingresaStock) a.costo -= cant * costoU
       porProducto.set(d.productoId, a)

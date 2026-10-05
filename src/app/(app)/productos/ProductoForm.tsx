@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { crearProductoAction, actualizarProductoAction, subirImagenProductoAction, quitarImagenProductoAction } from './actions'
 import { urlImagenProducto } from '@/lib/productos/url'
 import { comprimirImagen } from '@/lib/utils/comprimir-imagen'
+import { PresentacionesEditor } from './PresentacionesEditor'
 import type { ProductoRow, CategoriaRow } from './ProductosClient'
 
 export function ProductoForm({
@@ -194,6 +195,10 @@ export function ProductoForm({
               <input id="pf-plu" value={form.codigoBalanza} onChange={(e) => set('codigoBalanza', e.target.value.replace(/\D/g, ''))} className="input font-mono" inputMode="numeric" maxLength={6} placeholder="Solo si se pesa" />
             </div>
           </div>
+
+          {esEdicion && producto && (
+            <PresentacionesEditor productoId={producto.id} ivaPorcentaje={Number(form.ivaPorcentaje) || 0} precioBase={Number(form.precioVenta) || 0} unidad={form.unidad} />
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn-ghost">Cancelar</button>

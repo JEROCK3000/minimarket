@@ -10,6 +10,7 @@ import { readFileSync, existsSync } from 'fs'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
 import { calcularVenta } from '@/lib/ventas/totales'
 import { extraerInfoAdicional } from '@/lib/sri/info-adicional'
+import { descripcionItem } from '@/lib/ventas/presentaciones'
 
 /** Carga el logo del emisor desde disco y lo devuelve como base64 para el RIDE. */
 function cargarLogo(logoPath: string | null): { base64: string; formato: 'PNG' | 'JPEG' } | null {
@@ -165,13 +166,13 @@ async function construirRideNC(tenantId: string, ventaId: string, ncId?: string)
 class ErrorRide extends Error {}
 
 /** Ítems y totales del RIDE de una NC parcial (los guardados en la devolución). */
-async function datosRideDevolucion(devolucionId: string, itemsVenta: { id: string; productoId: string; producto: { nombre: string } }[]) {
+async function datosRideDevolucion(devolucionId: string, itemsVenta: { id: string; productoId: string; presentacion: string | null; producto: { nombre: string } }[]) {
   const dev = await prisma.devolucion.findUniqueOrThrow({ where: { id: devolucionId }, include: { items: true } })
   const nombre = new Map(itemsVenta.map((i) => [i.id, i]))
   const baseDe = (gravada: boolean) => dev.items.filter((i) => (Number(i.ivaPorcentaje) > 0) === gravada).reduce((a, i) => a + Number(i.base), 0)
   return {
     items: dev.items.map((i) => ({
-      codigo: (nombre.get(i.ventaItemId)?.productoId ?? i.productoId).slice(-6), descripcion: nombre.get(i.ventaItemId)?.producto.nombre ?? 'Producto',
+      codigo: (nombre.get(i.ventaItemId)?.productoId ?? i.productoId).slice(-6), descripcion: nombre.get(i.ventaItemId) ? descripcionItem(nombre.get(i.ventaItemId)!.producto.nombre, nombre.get(i.ventaItemId)!.presentacion) : 'Producto',
       cantidad: Number(i.cantidad), precioUnitario: Number(i.precioUnitario), descuento: Number(i.descuento), subtotal: Number(i.base),
     })),
     totales: {
@@ -217,7 +218,7 @@ export async function enviarNCEmailAction(ventaId: string, emailManual?: string,
  */
 function datosRide(venta: {
   descuento: unknown
-  items: { productoId: string; cantidad: unknown; precioUnitario: unknown; producto: { nombre: string; ivaPorcentaje: unknown } }[]
+  items: { productoId: string; cantidad: unknown; precioUnitario: unknown; presentacion?: string | null; producto: { nombre: string; ivaPorcentaje: unknown } }[]
 }) {
   const calc = calcularVenta(
     venta.items.map((it) => ({ cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje) })),
@@ -226,7 +227,7 @@ function datosRide(venta: {
   const baseDe = (gravada: boolean) => calc.porTarifa.filter((t) => (t.tarifa > 0) === gravada).reduce((a, t) => a + t.base, 0)
   return {
     items: venta.items.map((it, i) => ({
-      codigo: it.productoId.slice(-6), descripcion: it.producto.nombre, cantidad: Number(it.cantidad),
+      codigo: it.productoId.slice(-6), descripcion: descripcionItem(it.producto.nombre, it.presentacion), cantidad: Number(it.cantidad),
       precioUnitario: Number(it.precioUnitario), descuento: calc.lineas[i].descuento, subtotal: calc.lineas[i].base,
     })),
     totales: {

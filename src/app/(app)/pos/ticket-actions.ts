@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db/prisma'
 import { requerirTenant } from '@/lib/auth/tenant'
 import { format } from 'date-fns'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
+import { descripcionItem } from '@/lib/ventas/presentaciones'
 
 export interface TicketData {
   negocio: { nombre: string; ruc: string | null; direccion: string | null }
@@ -55,7 +56,7 @@ export async function obtenerTicketAction(ventaId: string): Promise<{ success: t
           cliente: venta.cliente?.nombre ?? 'Consumidor Final',
           clienteId: compradorDeVenta(venta)?.identificacion ?? null,
           items: venta.items.map((it) => ({
-            nombre: it.producto.nombre, cantidad: Number(it.cantidad),
+            nombre: descripcionItem(it.producto.nombre, it.presentacion), cantidad: Number(it.cantidad),
             precioUnitario: Number(it.precioUnitario), subtotal: Number(it.subtotal),
           })),
           subtotal: Number(venta.subtotal), descuento: Number(venta.descuento),

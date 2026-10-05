@@ -32,14 +32,18 @@ export async function calcularPedidoSugerido(tenantId: string, opciones: { prove
       where: { tenantId, activo: true, ...(productoIds ? { id: { in: productoIds } } : {}) },
       select: { id: true, nombre: true, unidad: true, stock: true, stockMinimo: true, precioCompra: true }, orderBy: { nombre: 'asc' },
     }),
-    prisma.ventaItem.groupBy({ by: ['productoId'], where: { venta: { tenantId, estado: 'COMPLETADA', fecha: { gte: desde } } }, _sum: { cantidad: true } }),
-    prisma.devolucionItem.groupBy({ by: ['productoId'], where: { devolucion: { tenantId, createdAt: { gte: desde } } }, _sum: { cantidad: true } }),
+    // En unidades del producto: una presentación (caja x24) cuenta cantidad × factor.
+    prisma.ventaItem.findMany({ where: { venta: { tenantId, estado: 'COMPLETADA', fecha: { gte: desde } } }, select: { productoId: true, cantidad: true, factor: true } }),
+    prisma.devolucionItem.findMany({ where: { devolucion: { tenantId, createdAt: { gte: desde } } }, select: { productoId: true, cantidad: true, ventaItem: { select: { factor: true } } } }),
     rucProveedor
       ? prisma.productoCodigoProveedor.findMany({ where: { tenantId, proveedorRuc: rucProveedor, factor: { gt: 1 } }, select: { productoId: true, factor: true } })
       : Promise.resolve([] as { productoId: string; factor: unknown }[]),
   ])
-  const vendido = new Map(vendidos.map((v) => [v.productoId, Number(v._sum.cantidad ?? 0)]))
-  const devuelto = new Map(devueltos.map((v) => [v.productoId, Number(v._sum.cantidad ?? 0)]))
+  const sumar = (m: Map<string, number>, id: string, n: number) => m.set(id, (m.get(id) ?? 0) + n)
+  const vendido = new Map<string, number>()
+  for (const v of vendidos) sumar(vendido, v.productoId, Number(v.cantidad) * Number(v.factor))
+  const devuelto = new Map<string, number>()
+  for (const v of devueltos) sumar(devuelto, v.productoId, Number(v.cantidad) * Number(v.ventaItem.factor))
   const factorDe = new Map(empaques.map((e) => [e.productoId, Number(e.factor)]))
 
   const lineas: LineaPedido[] = productos.map((p) => {

@@ -12,6 +12,7 @@ import { CONSUMIDOR_FINAL } from '@/lib/clientes/identificacion'
 import { cajaAbierta } from '@/lib/caja/estado'
 import { usaControlCaja } from '@/lib/config/negocio'
 import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
+import { precioUnitarioPara } from '@/lib/ventas/presentaciones'
 
 const ventaSchema = z.object({
   clienteId: z.string().optional().or(z.literal('')),
@@ -22,7 +23,8 @@ const ventaSchema = z.object({
   items: z.array(z.object({
     productoId: z.string().min(1),
     cantidad: z.coerce.number().positive(),
-  })).min(1, 'El carrito está vacío'),
+    presentacionId: z.string().max(40).optional().or(z.literal('')),
+  })).min(1, 'El carrito está vacío').max(500),
 })
 
 export interface VentaFormValues {
@@ -31,7 +33,7 @@ export interface VentaFormValues {
   requiereFactura: boolean
   pagoCon?: number
   descuento?: number
-  items: { productoId: string; cantidad: number }[]
+  items: { productoId: string; cantidad: number; presentacionId?: string }[]
 }
 
 export async function registrarVentaAction(data: VentaFormValues) {
@@ -56,13 +58,34 @@ export async function registrarVentaAction(data: VentaFormValues) {
     const ids = d.items.map((i) => i.productoId)
     const productos = await prisma.producto.findMany({
       where: { id: { in: ids }, tenantId: sesion.tenantId, activo: true },
+      include: { preciosEscala: { select: { desde: true, precioVenta: true } } },
     })
     if (productos.length !== new Set(ids).size) return { error: 'Uno o más productos no son válidos' }
     const mapProd = new Map(productos.map((p) => [p.id, p]))
 
+    // Presentaciones (six-pack, caja…): del mismo producto y del tenant
+    const presIds = d.items.map((i) => i.presentacionId).filter((x): x is string => !!x)
+    const presentaciones = presIds.length
+      ? await prisma.productoPresentacion.findMany({ where: { id: { in: presIds }, tenantId: sesion.tenantId, activo: true } })
+      : []
+    const mapPres = new Map(presentaciones.map((p) => [p.id, p]))
     for (const it of d.items) {
+      if (it.presentacionId && mapPres.get(it.presentacionId)?.productoId !== it.productoId) return { error: 'Presentación no válida' }
+    }
+    const factorDe = (it: (typeof d.items)[number]) => (it.presentacionId ? Number(mapPres.get(it.presentacionId)!.factor) : 1)
+    // Precio por línea: el de la presentación, o el de la escala por mayor alcanzada.
+    const precioDe = (it: (typeof d.items)[number]) => {
       const prod = mapProd.get(it.productoId)!
-      if (Number(prod.stock) < it.cantidad) {
+      if (it.presentacionId) return Number(mapPres.get(it.presentacionId)!.precioVenta)
+      return precioUnitarioPara(Number(prod.precioVenta), prod.preciosEscala.map((e) => ({ desde: Number(e.desde), precioVenta: Number(e.precioVenta) })), it.cantidad)
+    }
+
+    // Stock en unidades del producto (suma de todas sus líneas y presentaciones)
+    const necesario = new Map<string, number>()
+    for (const it of d.items) necesario.set(it.productoId, (necesario.get(it.productoId) ?? 0) + it.cantidad * factorDe(it))
+    for (const [id, cant] of necesario) {
+      const prod = mapProd.get(id)!
+      if (Number(prod.stock) + 1e-9 < cant) {
         return { error: `Stock insuficiente de "${prod.nombre}" (disponible: ${Number(prod.stock)})` }
       }
     }
@@ -93,7 +116,7 @@ export async function registrarVentaAction(data: VentaFormValues) {
     const calculo = calcularVenta(
       d.items.map((it) => {
         const prod = mapProd.get(it.productoId)!
-        return { cantidad: it.cantidad, precioUnitario: Number(prod.precioVenta), ivaPorcentaje: Number(prod.ivaPorcentaje) }
+        return { cantidad: it.cantidad, precioUnitario: precioDe(it), ivaPorcentaje: Number(prod.ivaPorcentaje) }
       }),
       d.descuento || 0,
     )
@@ -131,7 +154,11 @@ export async function registrarVentaAction(data: VentaFormValues) {
               cantidad: it.cantidad,
               precioUnitario: calculo.lineas[i].precioUnitario,
               subtotal: calculo.lineas[i].subtotal,
-              costoUnitario: Number(mapProd.get(it.productoId)!.precioCompra),
+              // costo por presentación (unidades × costo unitario) para la utilidad
+              costoUnitario: Number(mapProd.get(it.productoId)!.precioCompra) * factorDe(it),
+              presentacionId: it.presentacionId || null,
+              presentacion: it.presentacionId ? mapPres.get(it.presentacionId)!.nombre : null,
+              factor: factorDe(it),
             })),
           },
         },
@@ -141,7 +168,7 @@ export async function registrarVentaAction(data: VentaFormValues) {
       for (const it of d.items) {
         await moverStock(tx, {
           tenantId: sesion.tenantId, productoId: it.productoId,
-          cantidad: -it.cantidad, tipo: 'VENTA', motivo: `Venta ${numero}`,
+          cantidad: -it.cantidad * factorDe(it), tipo: 'VENTA', motivo: `Venta ${numero}`,
         })
       }
       return v

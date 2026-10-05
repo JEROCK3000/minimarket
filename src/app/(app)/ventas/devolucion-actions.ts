@@ -14,6 +14,7 @@ import { emitirNotaCreditoSri, consultarAutorizacionNC, numeroDesdeClave } from 
 import { ENDPOINTS_SRI } from '@/lib/sri/helpers'
 import { usaControlCaja } from '@/lib/config/negocio'
 import { cajaAbierta, obtenerEstadoCaja } from '@/lib/caja/estado'
+import { descripcionItem } from '@/lib/ventas/presentaciones'
 
 /**
  * Devoluciones parciales (solo ADMIN). Ticket → devolución interna. Factura
@@ -71,7 +72,7 @@ export async function obtenerDatosDevolucionAction(ventaId: string) {
         ncPendiente: venta.notasCredito.length > 0,
       },
       lineas: venta.items.map((it) => ({
-        id: it.id, nombre: it.producto.nombre, unidad: it.producto.unidad, cantidad: Number(it.cantidad),
+        id: it.id, nombre: descripcionItem(it.producto.nombre, it.presentacion), unidad: it.presentacion ? 'presentación' : it.producto.unidad, cantidad: Number(it.cantidad),
         precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje),
         devuelto: devuelto.get(it.id) ?? { cantidad: 0, descuento: 0, base: 0, iva: 0 },
       })),
@@ -131,9 +132,10 @@ async function aplicarDevolucion(p: {
     }
     for (const l of calc.lineas) {
       const it = venta.items.find((i) => i.id === l.ventaItemId)!
-      await moverStock(tx, { tenantId: p.tenantId, productoId: it.productoId, cantidad: l.cantidad, tipo: 'AJUSTE', motivo: `Devolución ${numero} (venta ${venta.numero})`, usuarioNombre: p.usuarioNombre })
+      const unidades = l.cantidad * Number(it.factor) // presentaciones: cajas → unidades
+      await moverStock(tx, { tenantId: p.tenantId, productoId: it.productoId, cantidad: unidades, tipo: 'AJUSTE', motivo: `Devolución ${numero} (venta ${venta.numero})`, usuarioNombre: p.usuarioNombre })
       if (!p.d.reingresaStock) {
-        await moverStock(tx, { tenantId: p.tenantId, productoId: it.productoId, cantidad: -l.cantidad, tipo: 'MERMA', motivo: `Devolución ${numero}: volvió dañado`, categoria: 'DANADO', usuarioNombre: p.usuarioNombre })
+        await moverStock(tx, { tenantId: p.tenantId, productoId: it.productoId, cantidad: -unidades, tipo: 'MERMA', motivo: `Devolución ${numero}: volvió dañado`, categoria: 'DANADO', usuarioNombre: p.usuarioNombre })
       }
     }
     await tx.venta.update({ where: { id: venta.id }, data: { totalDevuelto: { increment: calc.total } } })
@@ -199,7 +201,7 @@ export async function registrarDevolucionAction(data: DevolucionValues) {
       motivo: d.motivo, base: calc.base, total: calc.total, porTarifa: calc.porTarifa,
       detalles: calc.lineas.map((l) => {
         const it = nombres.get(l.ventaItemId)!
-        return { codigoInterno: it.productoId.slice(-6), descripcion: it.producto.nombre, cantidad: l.cantidad, precioUnitario: l.precioUnitario, descuento: l.descuento, base: l.base, ivaPorcentaje: l.ivaPorcentaje, iva: l.iva }
+        return { codigoInterno: it.productoId.slice(-6), descripcion: descripcionItem(it.producto.nombre, it.presentacion), cantidad: l.cantidad, precioUnitario: l.precioUnitario, descuento: l.descuento, base: l.base, ivaPorcentaje: l.ivaPorcentaje, iva: l.iva }
       }),
     })
     if ('error' in r) return { error: r.error }

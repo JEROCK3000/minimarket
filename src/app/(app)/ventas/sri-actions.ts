@@ -14,6 +14,7 @@ import { calcularVenta } from '@/lib/ventas/totales'
 import { codigoPorcentajeIva, formaPagoSri } from '@/lib/sri/impuestos'
 import { camposAdicionalesEmision } from '@/lib/sri/info-adicional'
 import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
+import { descripcionItem } from '@/lib/ventas/presentaciones'
 
 /**
  * Emite la factura electrónica de una venta al SRI.
@@ -107,7 +108,7 @@ export async function emitirFacturaVentaAction(ventaId: string) {
           const l = calculo.lineas[i]
           return {
             codigoPrincipal: item.productoId.substring(0, 25),
-            descripcion: item.producto.nombre,
+            descripcion: descripcionItem(item.producto.nombre, item.presentacion),
             cantidad: String(item.cantidad),
             precioUnitario: Number(item.precioUnitario).toFixed(4),
             descuento: l.descuento.toFixed(2),

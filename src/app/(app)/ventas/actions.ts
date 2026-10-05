@@ -45,7 +45,7 @@ export async function anularVentaAction(ventaId: string) {
       for (const it of venta.items) {
         await moverStock(tx, {
           tenantId: sesion.tenantId, productoId: it.productoId,
-          cantidad: Number(it.cantidad), tipo: 'AJUSTE', motivo: `Anulación venta ${venta.numero}`,
+          cantidad: Number(it.cantidad) * Number(it.factor), tipo: 'AJUSTE', motivo: `Anulación venta ${venta.numero}`,
         })
       }
     })

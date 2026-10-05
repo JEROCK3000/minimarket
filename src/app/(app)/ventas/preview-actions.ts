@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db/prisma'
 import { requerirTenant } from '@/lib/auth/tenant'
 import { format } from 'date-fns'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
+import { descripcionItem } from '@/lib/ventas/presentaciones'
 
 /** Devuelve los datos proyectados de la factura de una venta, SIN emitirla al SRI. */
 export async function obtenerVistaPreviaFacturaAction(ventaId: string) {
@@ -41,7 +42,7 @@ export async function obtenerVistaPreviaFacturaAction(ventaId: string) {
       numeroFactura,
       fecha: format(venta.fecha, 'dd/MM/yyyy'),
       items: venta.items.map((it) => ({
-        nombre: it.producto.nombre,
+        nombre: descripcionItem(it.producto.nombre, it.presentacion),
         cantidad: Number(it.cantidad),
         precioUnitario: Number(it.precioUnitario),
         subtotal: Number(it.subtotal),
