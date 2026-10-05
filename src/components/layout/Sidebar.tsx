@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, Package, ShoppingCart, Truck, Receipt,
-  Wallet, FileText, Settings, Menu, X, Store, Users, Calculator, UserCog, Building2, ShieldCheck, HandCoins, ClipboardCheck,
+  Wallet, FileText, Settings, Menu, X, Store, Users, Calculator, UserCog, Building2, ShieldCheck, HandCoins, ClipboardCheck, PackageX,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
@@ -14,6 +14,7 @@ const MODULOS = [
   { href: '/pos', label: 'Punto de Venta', icon: ShoppingCart, destacado: true },
   { href: '/productos', label: 'Productos', icon: Package },
   { href: '/inventario', label: 'Toma de inventario', icon: ClipboardCheck },
+  { href: '/mermas', label: 'Mermas', icon: PackageX, soloAdmin: true },
   { href: '/compras', label: 'Compras', icon: Truck },
   { href: '/proveedores', label: 'Proveedores', icon: Building2, soloAdmin: true },
   { href: '/ventas', label: 'Ventas', icon: Receipt },
