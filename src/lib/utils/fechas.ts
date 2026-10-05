@@ -23,3 +23,13 @@ export function fechaDeDia(dia: string | undefined | null): Date {
   if (!dia || !/^\d{4}-\d{2}-\d{2}$/.test(dia) || dia === hoyLocalISO()) return new Date()
   return new Date(`${dia}T12:00:00`)
 }
+
+/** Días desde hoy (local) hasta un día YYYY-MM-DD: 0 = hoy, negativo = ya pasó. */
+export function diasHasta(dia: string, hoy: string = hoyLocalISO()): number {
+  const [a, m, d] = dia.split('-').map(Number)
+  const [ah, mh, dh] = hoy.split('-').map(Number)
+  return Math.round((Date.UTC(a, m - 1, d) - Date.UTC(ah, mh - 1, dh)) / 86400000)
+}
+
+/** Vencimientos de compra: a partir de cuántos días se pide confirmar la fecha. */
+export const DIAS_CONFIRMAR_VENCIMIENTO = 7

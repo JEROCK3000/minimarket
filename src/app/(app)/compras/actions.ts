@@ -5,6 +5,7 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { diasHasta, hoyLocalISO } from '@/lib/utils/fechas'
 import { moverStock } from '@/lib/inventario/movimientos'
 import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
@@ -75,6 +76,10 @@ export async function crearCompraAction(data: CompraFormValues) {
   const parsed = compraSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data
+  // Un producto que ya venció no se ingresa como compra (suele ser un error al elegir la fecha).
+  if (d.items.some((it) => it.fechaVencimiento && diasHasta(it.fechaVencimiento) < 0)) {
+    return { error: 'Hay una fecha de vencimiento anterior a hoy: revisa las fechas' }
+  }
 
   try {
     // Validar que todos los productos pertenecen al tenant
@@ -165,7 +170,7 @@ export interface CompraDetalle {
   motivoAnulacion: string | null
   notas: string | null
   proveedor: { nombre: string; identificacion: string | null; telefono: string | null } | null
-  items: { productoId: string; nombre: string; unidad: string; cantidad: number; precioUnitario: number; subtotal: number; ivaPorcentaje: number; fechaVencimiento: string | null }[]
+  items: { id: string; productoId: string; nombre: string; unidad: string; cantidad: number; precioUnitario: number; subtotal: number; ivaPorcentaje: number; fechaVencimiento: string | null }[]
   subtotal: number
   iva: number
   total: number
@@ -191,7 +196,7 @@ export async function obtenerCompraAction(id: string): Promise<{ success: true; 
       estado: c.estado, anuladaAt: c.anuladaAt?.toISOString() ?? null, motivoAnulacion: c.motivoAnulacion, notas: c.notas,
       proveedor: c.proveedor,
       items: c.items.map((it) => ({
-        productoId: it.productoId, nombre: it.producto.nombre, unidad: it.producto.unidad,
+        id: it.id, productoId: it.productoId, nombre: it.producto.nombre, unidad: it.producto.unidad,
         cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), subtotal: Number(it.subtotal),
         ivaPorcentaje: Number(it.producto.ivaPorcentaje),
         fechaVencimiento: it.fechaVencimiento ? it.fechaVencimiento.toISOString().slice(0, 10) : null,
@@ -263,3 +268,29 @@ export async function anularCompraAction(id: string, motivo: string) {
 
 /** Error con mensaje apto para el usuario (reglas de negocio). */
 class ErrorNegocio extends Error {}
+
+/**
+ * Corrige la fecha de vencimiento de un ítem de compra (no mueve stock, por eso
+ * no hace falta anular la compra). Solo ADMIN, compra activa del tenant.
+ */
+export async function actualizarVencimientoItemAction(compraId: string, itemId: string, fecha: string | null) {
+  const sesion = await requerirTenant('ADMIN')
+  if (fecha !== null && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return { error: 'Fecha inválida' }
+  if (fecha && diasHasta(fecha) < 0) return { error: 'La fecha de vencimiento no puede ser anterior a hoy' }
+  try {
+    const item = await prisma.compraItem.findFirst({
+      where: { id: itemId, compraId, compra: { tenantId: sesion.tenantId } },
+      select: { fechaVencimiento: true, producto: { select: { nombre: true } }, compra: { select: { numero: true, estado: true } } },
+    })
+    if (!item) return { error: 'Ítem no encontrado' }
+    if (item.compra.estado === 'ANULADA') return { error: 'La compra está anulada' }
+    await prisma.compraItem.update({ where: { id: itemId }, data: { fechaVencimiento: fecha ? new Date(`${fecha}T12:00:00Z`) : null } })
+    const antes = item.fechaVencimiento ? item.fechaVencimiento.toISOString().slice(0, 10) : 'sin fecha'
+    await registrarLog('AUDIT', 'COMPRAS', `Vencimiento corregido en compra ${item.compra.numero} (${item.producto.nombre}): ${antes} → ${fecha ?? 'sin fecha'} el ${hoyLocalISO()}`, { usuarioId: sesion.sub }, sesion.tenantId)
+    revalidatePath('/compras'); revalidatePath('/productos')
+    return { success: true }
+  } catch (error: any) {
+    await registrarLog('ERROR', 'COMPRAS', `Error corrigiendo vencimiento: ${error.message || error}`, { usuarioId: sesion.sub }, sesion.tenantId)
+    return { error: 'No se pudo guardar la fecha' }
+  }
+}

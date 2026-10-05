@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Loader2, Save, Plus, Trash2 } from 'lucide-react'
+import { X, Loader2, Save, Plus, Trash2, AlertTriangle } from 'lucide-react'
+import { diasHasta, hoyLocalISO, DIAS_CONFIRMAR_VENCIMIENTO } from '@/lib/utils/fechas'
 import { toast } from 'sonner'
 import { crearCompraAction, crearProveedorAction } from './actions'
 import type { ProveedorOpt, ProductoOpt } from './ComprasClient'
@@ -20,12 +21,14 @@ export function CompraForm({
   const [diasPlazo, setDiasPlazo] = useState('30')
   const [lineas, setLineas] = useState<Linea[]>([{ productoId: '', cantidad: '1', precioUnitario: '', fechaVencimiento: '' }])
   const [loading, setLoading] = useState(false)
+  // Vencimientos próximos que el usuario debe confirmar antes de guardar.
+  const [porConfirmar, setPorConfirmar] = useState<{ nombre: string; fecha: string; dias: number }[] | null>(null)
   const [nuevoProv, setNuevoProv] = useState('')
 
   const money = (n: number) => `$${n.toFixed(2)}`
   const total = lineas.reduce((s, l) => s + (Number(l.cantidad) || 0) * (Number(l.precioUnitario) || 0), 0)
 
-  const setLinea = (i: number, campo: keyof Linea, valor: string) => {
+  const setLineaBase = (i: number, campo: keyof Linea, valor: string) => {
     setLineas((ls) => ls.map((l, idx) => {
       if (idx !== i) return l
       const nueva = { ...l, [campo]: valor }
@@ -36,7 +39,9 @@ export function CompraForm({
       }
       return nueva
     }))
-  }
+  }  // Cualquier cambio en las líneas obliga a volver a confirmar las fechas.
+  const setLinea = (i: number, campo: keyof Linea, valor: string) => { setPorConfirmar(null); setLineaBase(i, campo, valor) }
+
   const agregarLinea = () => setLineas((ls) => [...ls, { productoId: '', cantidad: '1', precioUnitario: '', fechaVencimiento: '' }])
   const quitarLinea = (i: number) => setLineas((ls) => ls.filter((_, idx) => idx !== i))
 
@@ -53,8 +58,21 @@ export function CompraForm({
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const nombreProducto = (id: string) => productos.find((p) => p.id === id)?.nombre ?? 'Producto'
+  const fechaCorta = (f: string) => f.split('-').reverse().join('/')
+  const textoDias = (d: number) => (d === 0 ? 'vence HOY' : d === 1 ? 'vence mañana' : `vence en ${d} días`)
+
+  const handleSubmit = async (e: React.FormEvent, confirmado = false) => {
     e.preventDefault()
+    const conFecha = lineas.filter((l) => l.productoId && Number(l.cantidad) > 0 && l.fechaVencimiento)
+    if (conFecha.some((l) => diasHasta(l.fechaVencimiento) < 0)) {
+      toast.error('Hay una fecha de vencimiento anterior a hoy: revisa las fechas'); return
+    }
+    const proximas = conFecha
+      .map((l) => ({ nombre: nombreProducto(l.productoId), fecha: l.fechaVencimiento, dias: diasHasta(l.fechaVencimiento) }))
+      .filter((x) => x.dias <= DIAS_CONFIRMAR_VENCIMIENTO)
+    if (proximas.length > 0 && !confirmado) { setPorConfirmar(proximas); return }
+    setPorConfirmar(null)
     const items = lineas
       .filter((l) => l.productoId && Number(l.cantidad) > 0)
       .map((l) => ({ productoId: l.productoId, cantidad: Number(l.cantidad), precioUnitario: Number(l.precioUnitario) || 0, fechaVencimiento: l.fechaVencimiento || undefined }))
@@ -137,7 +155,16 @@ export function CompraForm({
                 </select>
                 <input type="number" step="any" min="0" value={l.cantidad} onChange={(e) => setLinea(i, 'cantidad', e.target.value)} className="input w-20" placeholder="Cant." title="Cantidad" />
                 <input type="number" step="0.0001" min="0" value={l.precioUnitario} onChange={(e) => setLinea(i, 'precioUnitario', e.target.value)} className="input w-24" placeholder="P. compra" title="Precio unitario" />
-                <input type="date" value={l.fechaVencimiento} onChange={(e) => setLinea(i, 'fechaVencimiento', e.target.value)} className="input w-36" title="Fecha de vencimiento (opcional)" aria-label="Fecha de vencimiento" />
+                <div className="w-36">
+                  <input type="date" min={hoyLocalISO()} value={l.fechaVencimiento} onChange={(e) => setLinea(i, 'fechaVencimiento', e.target.value)}
+                    className={`input w-full ${l.fechaVencimiento && diasHasta(l.fechaVencimiento) <= DIAS_CONFIRMAR_VENCIMIENTO ? 'border-amber-400 dark:border-amber-500/60' : ''}`}
+                    title="Fecha de vencimiento (opcional)" aria-label="Fecha de vencimiento" />
+                  {l.fechaVencimiento && diasHasta(l.fechaVencimiento) <= DIAS_CONFIRMAR_VENCIMIENTO && (
+                    <p className={`text-[11px] mt-0.5 ${diasHasta(l.fechaVencimiento) < 0 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                      {diasHasta(l.fechaVencimiento) < 0 ? 'Ya venció' : textoDias(diasHasta(l.fechaVencimiento))}
+                    </p>
+                  )}
+                </div>
                 <button type="button" onClick={() => quitarLinea(i)} className="p-2 text-gray-400 hover:text-red-500 shrink-0" disabled={lineas.length === 1}><Trash2 size={16} /></button>
               </div>
             ))}
@@ -150,9 +177,26 @@ export function CompraForm({
             <span className="text-xl font-black text-gray-900 dark:text-white">{money(total)}</span>
           </div>
 
+          {porConfirmar && (
+            <div role="alertdialog" aria-labelledby="conf-venc" className="rounded-xl border border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/5 p-4 space-y-3">
+              <p id="conf-venc" className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300 text-sm">
+                <AlertTriangle size={16} /> ¿Las fechas de vencimiento son correctas?
+              </p>
+              <ul className="text-sm text-amber-900 dark:text-amber-200 space-y-0.5">
+                {porConfirmar.map((x, i) => <li key={i}>• {x.nombre}: {fechaCorta(x.fecha)} — <strong>{textoDias(x.dias)}</strong></li>)}
+              </ul>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" onClick={() => setPorConfirmar(null)} className="btn-ghost text-sm">Revisar fechas</button>
+                <button type="button" disabled={loading} onClick={(e) => handleSubmit(e as unknown as React.FormEvent, true)} className="btn-primary bg-amber-600 hover:bg-amber-700 text-sm">
+                  {loading ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Sí, son correctas
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="btn-ghost">Cancelar</button>
-            <button type="submit" disabled={loading} className="btn-primary">
+            <button type="submit" disabled={loading || !!porConfirmar} className="btn-primary">
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               Registrar compra
             </button>

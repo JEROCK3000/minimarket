@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Loader2, Ban, Truck, FileText } from 'lucide-react'
+import { X, Loader2, Ban, Truck, FileText, Pencil, Check } from 'lucide-react'
 import { toast } from 'sonner'
-import { obtenerCompraAction, anularCompraAction, type CompraDetalle as Detalle } from './actions'
+import { obtenerCompraAction, anularCompraAction, actualizarVencimientoItemAction, type CompraDetalle as Detalle } from './actions'
+import { hoyLocalISO } from '@/lib/utils/fechas'
 
 const money = (n: number) => `$${n.toFixed(2)}`
 const fechaLarga = (iso: string) =>
@@ -19,6 +20,22 @@ export function CompraDetalle({ compraId, puedeEditar, onClose }: { compraId: st
   const [anulando, setAnulando] = useState(false)
   const [motivo, setMotivo] = useState('')
   const [enviando, setEnviando] = useState(false)
+  // Corrección de la fecha de vencimiento de un ítem (sin anular la compra).
+  const [editVence, setEditVence] = useState<{ id: string; fecha: string } | null>(null)
+  const [guardandoVence, setGuardandoVence] = useState(false)
+
+  const guardarVence = async () => {
+    if (!editVence) return
+    setGuardandoVence(true)
+    try {
+      const r = await actualizarVencimientoItemAction(compraId, editVence.id, editVence.fecha || null)
+      if ('error' in r) { toast.error(r.error); return }
+      setCompra((c) => c && { ...c, items: c.items.map((it) => (it.id === editVence.id ? { ...it, fechaVencimiento: editVence.fecha || null } : it)) })
+      toast.success('Fecha de vencimiento actualizada')
+      setEditVence(null)
+      router.refresh()
+    } finally { setGuardandoVence(false) }
+  }
 
   useEffect(() => {
     let vigente = true
@@ -119,13 +136,33 @@ export function CompraDetalle({ compraId, puedeEditar, onClose }: { compraId: st
                   </tr>
                 </thead>
                 <tbody>
-                  {compra.items.map((it, i) => (
-                    <tr key={i} className="border-b border-gray-50 dark:border-white/5 last:border-0">
+                  {compra.items.map((it) => (
+                    <tr key={it.id} className="border-b border-gray-50 dark:border-white/5 last:border-0">
                       <td className="px-3 py-2 text-gray-900 dark:text-white">{it.nombre}</td>
                       <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-300">{cantidadTxt(it.cantidad)} <span className="text-xs text-gray-400">{it.unidad}</span></td>
                       <td className="px-3 py-2 text-right font-mono text-gray-600 dark:text-gray-300">${it.precioUnitario.toFixed(4)}</td>
                       <td className="px-3 py-2 text-right text-xs text-gray-500">{it.ivaPorcentaje}%</td>
-                      <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{it.fechaVencimiento ? it.fechaVencimiento.split('-').reverse().join('/') : '—'}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+                        {editVence?.id === it.id ? (
+                          <div className="flex items-center gap-1">
+                            <input type="date" min={hoyLocalISO()} value={editVence.fecha} onChange={(e) => setEditVence({ id: it.id, fecha: e.target.value })}
+                              className="input h-8 text-xs w-36" aria-label="Nueva fecha de vencimiento" autoFocus />
+                            <button onClick={guardarVence} disabled={guardandoVence} className="p-1 text-emerald-600 hover:text-emerald-700" aria-label="Guardar fecha">
+                              {guardandoVence ? <Loader2 size={14} className="animate-spin" /> : <Check size={15} />}
+                            </button>
+                            <button onClick={() => setEditVence(null)} disabled={guardandoVence} className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-white" aria-label="Cancelar"><X size={15} /></button>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            {it.fechaVencimiento ? it.fechaVencimiento.split('-').reverse().join('/') : '—'}
+                            {puedeEditar && !anulada && (
+                              <button onClick={() => setEditVence({ id: it.id, fecha: it.fechaVencimiento ?? '' })} className="p-1 text-gray-400 hover:text-brand-600" aria-label={`Corregir vencimiento de ${it.nombre}`} title="Corregir fecha de vencimiento">
+                                <Pencil size={12} />
+                              </button>
+                            )}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-right font-semibold text-gray-900 dark:text-white">{money(it.subtotal)}</td>
                     </tr>
                   ))}
