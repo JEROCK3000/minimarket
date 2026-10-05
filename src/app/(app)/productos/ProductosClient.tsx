@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Search, Pencil, AlertTriangle, Package, History, Tags, Tag, Loader2, Upload } from 'lucide-react'
+import { Plus, Search, Pencil, AlertTriangle, Package, History, Tags, Tag, Loader2, Upload, Percent } from 'lucide-react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { imprimirEtiquetas } from '@/lib/print/termica'
 import { urlImagenProducto } from '@/lib/productos/url'
@@ -102,6 +103,9 @@ export function ProductosClient({
             <button onClick={() => setVerCategorias(true)} className="btn-ghost">
               <Tags size={16} /> Categorías
             </button>
+            <Link href="/productos/precios" className="btn-ghost" title="Subir o bajar precios de muchos productos a la vez">
+              <Percent size={16} /> Precios
+            </Link>
             <button onClick={() => setVerImportar(true)} className="btn-ghost" title="Importar productos desde Excel">
               <Upload size={16} /> Importar
             </button>

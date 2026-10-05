@@ -124,6 +124,12 @@ export async function actualizarProductoAction(id: string, data: ProductoFormVal
       })
     }
 
+    // Historial de precios: solo si cambió el precio de venta.
+    if (Math.abs(Number(actual.precioVenta) - d.precioVenta) > 0.00005) {
+      await prisma.historialPrecio.create({
+        data: { tenantId: sesion.tenantId, productoId: id, precioAnterior: actual.precioVenta, precioNuevo: d.precioVenta, origen: 'EDICION', usuarioNombre: sesion.nombre },
+      })
+    }
     await prisma.producto.update({
       where: { id },
       data: {

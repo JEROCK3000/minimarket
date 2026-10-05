@@ -769,3 +769,19 @@ model DevolucionItem {
   @@index([ventaItemId])
   @@map("devolucion_items")
 }
+
+/// Historial de cambios del precio de venta (sin IVA): cambio masivo o edición del producto.
+model HistorialPrecio {
+  id             String   @id @default(cuid())
+  tenantId       String
+  productoId     String
+  precioAnterior Decimal  @db.Decimal(10, 4)
+  precioNuevo    Decimal  @db.Decimal(10, 4)
+  origen         String   @db.VarChar(12) // MASIVO | EDICION
+  detalle        String?  @db.VarChar(200) // regla aplicada en cambios masivos
+  usuarioNombre  String   @db.VarChar(120)
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId, productoId, createdAt])
+  @@map("historial_precios")
+}
