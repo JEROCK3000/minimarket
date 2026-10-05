@@ -624,7 +624,7 @@ model NotaCredito {
   venta           Venta   @relation(fields: [ventaId], references: [id], onDelete: Cascade)
   tipo            String  @default("TOTAL") @db.VarChar(10) // TOTAL (anula la factura) | PARCIAL (devolución)
   // NC parcial autorizada: la devolución que respalda
-  devolucionId    String? @unique
+  devolucionId    String? // se crea junto con la devolución, en la misma transacción
   // NC parcial que quedó PENDIENTE en el SRI: lo pedido, para aplicarlo al autorizarse
   datosPendientes Json?
 
@@ -641,6 +641,7 @@ model NotaCredito {
 
   @@index([tenantId])
   @@index([ventaId])
+  @@index([devolucionId])
   @@map("notas_credito")
 }
 
