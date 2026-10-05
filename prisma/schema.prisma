@@ -258,6 +258,7 @@ model Producto {
   compraItems      CompraItem[]
   ventaItems       VentaItem[]
   codigosProveedor ProductoCodigoProveedor[]
+  tomaItems        TomaInventarioItem[]
   movimientos      MovimientoInventario[]
 
   @@unique([tenantId, codigoBarras])
@@ -274,15 +275,19 @@ model MovimientoInventario {
   productoId String
   producto   Producto @relation(fields: [productoId], references: [id])
 
-  tipo        TipoMovimiento
-  cantidad    Decimal        @db.Decimal(10, 3) // + entra, - sale
-  stockPrevio Decimal        @db.Decimal(10, 3)
-  stockNuevo  Decimal        @db.Decimal(10, 3)
-  motivo      String?        @db.VarChar(200) // "Compra #12", "Venta #340", "Ajuste manual"
-  createdAt   DateTime       @default(now())
+  tipo          TipoMovimiento
+  cantidad      Decimal        @db.Decimal(10, 3) // + entra, - sale
+  stockPrevio   Decimal        @db.Decimal(10, 3)
+  stockNuevo    Decimal        @db.Decimal(10, 3)
+  motivo        String?        @db.VarChar(200) // "Compra #12", "Venta #340", "Ajuste manual"
+  categoria     String?        @db.VarChar(20) // pérdidas: VENCIDO | DANADO | CONSUMO | ROBO | FALTANTE | OTRO (lib/inventario/mermas.ts)
+  costoUnitario Decimal?       @db.Decimal(10, 4) // costo del producto al momento del movimiento (valoriza mermas)
+  usuarioNombre String?        @db.VarChar(120) // quién lo registró (ajustes, mermas, tomas)
+  createdAt     DateTime       @default(now())
 
   @@index([tenantId])
   @@index([productoId])
+  @@index([tenantId, tipo, createdAt])
   @@map("movimientos_inventario")
 }
 
@@ -642,4 +647,47 @@ model ProductoCodigoProveedor {
   @@unique([tenantId, proveedorRuc, codigo])
   @@index([productoId])
   @@map("productos_codigos_proveedor")
+}
+
+/// Toma de inventario físico: se cuentan los productos (todos o una categoría)
+/// y al aplicarla se ajusta la diferencia de cada uno con kardex.
+model TomaInventario {
+  id              String    @id @default(cuid())
+  tenantId        String
+  numero          String    @db.VarChar(20) // TI-00001
+  categoriaId     String? // alcance: null = todos los productos
+  categoriaNombre String?   @db.VarChar(100)
+  estado          String    @default("EN_CURSO") @db.VarChar(12) // EN_CURSO | APLICADA | CANCELADA
+  notas           String?   @db.VarChar(300)
+  creadaPor       String    @db.VarChar(120)
+  aplicadaPor     String?   @db.VarChar(120)
+  aplicadaAt      DateTime?
+  valorFaltante   Decimal   @default(0) @db.Decimal(12, 2) // a costo, al aplicar
+  valorSobrante   Decimal   @default(0) @db.Decimal(12, 2)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  items TomaInventarioItem[]
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, estado])
+  @@map("tomas_inventario")
+}
+
+model TomaInventarioItem {
+  id              String         @id @default(cuid())
+  tomaId          String
+  toma            TomaInventario @relation(fields: [tomaId], references: [id], onDelete: Cascade)
+  productoId      String
+  producto        Producto       @relation(fields: [productoId], references: [id])
+  cantidadContada Decimal        @db.Decimal(10, 3)
+  // Stock del sistema cuando se registró el conteo: al aplicar se ajusta
+  // (contado − stockAlContar), así las ventas posteriores al conteo se respetan.
+  stockAlContar   Decimal        @db.Decimal(10, 3)
+  contadoPor      String         @db.VarChar(120)
+  contadoAt       DateTime       @default(now())
+
+  @@unique([tomaId, productoId])
+  @@index([productoId])
+  @@map("tomas_inventario_items")
 }

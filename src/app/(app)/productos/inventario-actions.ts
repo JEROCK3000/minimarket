@@ -6,6 +6,7 @@ import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { moverStock } from '@/lib/inventario/movimientos'
+import { CATEGORIAS_MERMA_MANUAL, CATEGORIAS_MERMA, type CategoriaMerma } from '@/lib/inventario/mermas'
 import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 
 export interface MovimientoKardex {
@@ -16,6 +17,7 @@ export interface MovimientoKardex {
   stockPrevio: number
   stockNuevo: number
   motivo: string | null
+  usuario: string | null
 }
 
 /** Kardex de un producto: últimos 300 movimientos (más recientes primero). */
@@ -38,7 +40,7 @@ export async function obtenerKardexAction(productoId: string): Promise<
     producto: { nombre: producto.nombre, unidad: producto.unidad, stock: Number(producto.stock) },
     movimientos: movs.map((m) => ({
       id: m.id, fecha: m.createdAt.toISOString(), tipo: m.tipo, cantidad: Number(m.cantidad),
-      stockPrevio: Number(m.stockPrevio), stockNuevo: Number(m.stockNuevo), motivo: m.motivo,
+      stockPrevio: Number(m.stockPrevio), stockNuevo: Number(m.stockNuevo), motivo: m.motivo, usuario: m.usuarioNombre,
     })),
   }
 }
@@ -48,6 +50,7 @@ const ajusteSchema = z.object({
   modo: z.enum(['MERMA', 'ENTRADA', 'SALIDA', 'CONTEO']),
   cantidad: z.coerce.number().min(0, 'Cantidad inválida').max(9999999),
   motivo: z.string().trim().min(3, 'Indica el motivo').max(150),
+  categoria: z.enum(CATEGORIAS_MERMA_MANUAL as [CategoriaMerma, ...CategoriaMerma[]]).optional(),
 })
 export type AjusteStockValues = z.infer<typeof ajusteSchema>
 
@@ -69,6 +72,7 @@ export async function ajustarStockAction(data: AjusteStockValues) {
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data
   if (d.modo !== 'CONTEO' && d.cantidad <= 0) return { error: 'La cantidad debe ser mayor a cero' }
+  if (d.modo === 'MERMA' && !d.categoria) return { error: 'Indica el tipo de merma' }
 
   const producto = await prisma.producto.findFirst({
     where: { id: d.productoId, tenantId: sesion.tenantId },
@@ -90,7 +94,10 @@ export async function ajustarStockAction(data: AjusteStockValues) {
       const r = await moverStock(tx, {
         tenantId: sesion.tenantId, productoId: producto.id, cantidad: delta,
         tipo: d.modo === 'MERMA' ? 'MERMA' : 'AJUSTE',
-        motivo: `${etiquetas[d.modo]}: ${d.motivo}`,
+        motivo: `${etiquetas[d.modo]}${d.modo === 'MERMA' ? ` (${CATEGORIAS_MERMA[d.categoria!]})` : ''}: ${d.motivo}`,
+        // Mermas por su tipo; un conteo que baja el stock es un faltante.
+        categoria: d.modo === 'MERMA' ? d.categoria : d.modo === 'CONTEO' && delta < 0 ? 'FALTANTE' : undefined,
+        usuarioNombre: sesion.nombre,
       })
       if (r.stockNuevo < -0.0005) throw new ErrorNegocio(`No hay stock suficiente: quedaría en ${r.stockNuevo.toFixed(3)}`)
       return { delta, ...r }

@@ -18,6 +18,8 @@ export async function moverStock(
     tipo: TipoMovimiento
     motivo: string
     precioCompra?: number
+    categoria?: string // pérdidas (lib/inventario/mermas.ts)
+    usuarioNombre?: string
   },
 ) {
   const actualizado = await tx.producto.update({
@@ -26,7 +28,7 @@ export async function moverStock(
       stock: m.cantidad >= 0 ? { increment: m.cantidad } : { decrement: -m.cantidad },
       ...(m.precioCompra !== undefined ? { precioCompra: m.precioCompra } : {}),
     },
-    select: { stock: true },
+    select: { stock: true, precioCompra: true },
   })
   const stockNuevo = Number(actualizado.stock)
   const stockPrevio = stockNuevo - m.cantidad
@@ -39,6 +41,9 @@ export async function moverStock(
       stockPrevio,
       stockNuevo,
       motivo: m.motivo.slice(0, 200),
+      categoria: m.categoria ?? null,
+      costoUnitario: Number(actualizado.precioCompra), // ya actualizado si es compra
+      usuarioNombre: m.usuarioNombre?.slice(0, 120) ?? null,
     },
   })
   return { stockPrevio, stockNuevo }

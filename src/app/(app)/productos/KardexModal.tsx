@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { X, Loader2, History, SlidersHorizontal, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { obtenerKardexAction, ajustarStockAction, type MovimientoKardex, type AjusteStockValues } from './inventario-actions'
+import { CATEGORIAS_MERMA, CATEGORIAS_MERMA_MANUAL, type CategoriaMerma } from '@/lib/inventario/mermas'
 
 const TIPOS: Record<string, { texto: string; clase: string }> = {
   COMPRA: { texto: 'Compra', clase: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' },
@@ -30,6 +31,7 @@ export function KardexModal({ productoId, puedeEditar, onClose }: { productoId: 
   const [modo, setModo] = useState<AjusteStockValues['modo']>('MERMA')
   const [cantidad, setCantidad] = useState('')
   const [motivo, setMotivo] = useState('')
+  const [categoria, setCategoria] = useState<CategoriaMerma | ''>('')
   const [guardando, setGuardando] = useState(false)
 
   const cargar = useCallback(() => {
@@ -44,7 +46,8 @@ export function KardexModal({ productoId, puedeEditar, onClose }: { productoId: 
     e.preventDefault()
     setGuardando(true)
     try {
-      const r = await ajustarStockAction({ productoId, modo, cantidad: Number(cantidad), motivo })
+      if (modo === 'MERMA' && !categoria) { toast.error('Elige el tipo de merma'); return }
+      const r = await ajustarStockAction({ productoId, modo, cantidad: Number(cantidad), motivo, categoria: modo === 'MERMA' ? (categoria as CategoriaMerma) : undefined })
       if ('error' in r) { toast.error(r.error); return }
       toast.success(`Ajuste registrado. Stock actual: ${num(r.stockNuevo ?? 0)}`)
       setCantidad(''); setMotivo(''); setVista('kardex')
@@ -105,7 +108,7 @@ export function KardexModal({ productoId, puedeEditar, onClose }: { productoId: 
                         <tr key={m.id} className="border-b border-gray-50 dark:border-white/5 last:border-0">
                           <td className="py-2 pr-3 whitespace-nowrap text-gray-500 dark:text-gray-400 text-xs">{fecha(m.fecha)}</td>
                           <td className="py-2 pr-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.clase}`}>{t.texto}</span></td>
-                          <td className="py-2 pr-3 text-gray-700 dark:text-gray-300">{m.motivo || '—'}</td>
+                          <td className="py-2 pr-3 text-gray-700 dark:text-gray-300">{m.motivo || '—'}{m.usuario && <span className="block text-[11px] text-gray-400">{m.usuario}</span>}</td>
                           <td className={`py-2 pr-3 text-right font-mono font-semibold ${m.cantidad >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                             {m.cantidad > 0 ? '+' : ''}{num(m.cantidad)}
                           </td>
@@ -133,6 +136,21 @@ export function KardexModal({ productoId, puedeEditar, onClose }: { productoId: 
                 ))}
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400">{modoActual.ayuda}</p>
+              {modo === 'MERMA' && (
+                <div className="space-y-1.5">
+                  <span className={lbl}>Tipo de merma</span>
+                  <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Tipo de merma">
+                    {CATEGORIAS_MERMA_MANUAL.map((c) => (
+                      <button key={c} type="button" role="radio" aria-checked={categoria === c} onClick={() => setCategoria(c)}
+                        className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium transition ${categoria === c
+                          ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400'
+                          : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5'}`}>
+                        {CATEGORIAS_MERMA[c]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className={lbl} htmlFor="aj-cantidad">{modo === 'CONTEO' ? `Stock contado (${datos.producto.unidad})` : `Cantidad (${datos.producto.unidad})`}</label>
                 <input id="aj-cantidad" type="number" step="any" min="0" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="input" required />
