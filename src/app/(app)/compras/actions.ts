@@ -52,11 +52,28 @@ const compraSchema = z.object({
   condicionPago: z.enum(['CONTADO', 'CREDITO']).default('CONTADO'),
   diasPlazo: z.coerce.number().int().min(1).max(365).default(30),
   items: z.array(z.object({
-    productoId: z.string().min(1),
+    productoId: z.string().optional().or(z.literal('')),
+    // Producto nuevo (desde el XML): se crea al registrar la compra, con stock 0 antes del ingreso.
+    nuevo: z.object({
+      nombre: z.string().trim().min(1, 'Nombre del producto nuevo requerido').max(150),
+      codigoBarras: z.string().trim().max(50).optional().or(z.literal('')),
+      precioVenta: z.coerce.number().positive('Indica el precio de venta de los productos nuevos').max(999999),
+      ivaPorcentaje: z.coerce.number().refine((v) => [0, 5, 12, 13, 14, 15].includes(v), 'Tarifa de IVA no válida para el SRI'),
+    }).optional(),
     cantidad: z.coerce.number().positive('Cantidad inválida'),
     precioUnitario: z.coerce.number().min(0),
     fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha de vencimiento inválida').optional().or(z.literal('')),
-  })).min(1, 'Agrega al menos un producto'),
+    // Solo compras cargadas desde XML: código del artículo en el proveedor y unidades por empaque.
+    codigoProveedor: z.string().trim().max(50).optional(),
+    factor: z.coerce.number().positive().max(100000).optional(),
+  }).refine((it) => !!it.productoId || !!it.nuevo, 'Elige un producto en cada línea')).min(1, 'Agrega al menos un producto').max(500),
+  claveAcceso: z.string().regex(/^\d{49}$/).optional().or(z.literal('')),
+  // Proveedor leído del XML que aún no está registrado: se crea al guardar la compra.
+  proveedorNuevo: z.object({
+    ruc: z.string().regex(/^\d{13}$/, 'RUC del proveedor inválido'),
+    nombre: z.string().trim().min(1).max(150),
+    direccion: z.string().trim().max(300).optional().or(z.literal('')),
+  }).optional(),
 })
 export interface CompraFormValues {
   proveedorId?: string
@@ -64,7 +81,12 @@ export interface CompraFormValues {
   notas?: string
   condicionPago?: 'CONTADO' | 'CREDITO'
   diasPlazo?: number
-  items: { productoId: string; cantidad: number; precioUnitario: number; fechaVencimiento?: string }[]
+  items: {
+    productoId?: string; cantidad: number; precioUnitario: number; fechaVencimiento?: string; codigoProveedor?: string; factor?: number
+    nuevo?: { nombre: string; codigoBarras?: string; precioVenta: number; ivaPorcentaje: number }
+  }[]
+  claveAcceso?: string
+  proveedorNuevo?: { ruc: string; nombre: string; direccion?: string }
 }
 
 export async function crearCompraAction(data: CompraFormValues) {
@@ -83,7 +105,12 @@ export async function crearCompraAction(data: CompraFormValues) {
 
   try {
     // Validar que todos los productos pertenecen al tenant
-    const ids = d.items.map((i) => i.productoId)
+    const nuevos = d.items.filter((i) => !i.productoId && i.nuevo).length
+    if (nuevos > 0) {
+      const limite = await limiteDelPlan(sesion.tenantId, 'productos', nuevos)
+      if (limite) return { error: limite }
+    }
+    const ids = d.items.filter((i) => i.productoId).map((i) => i.productoId!)
     const productos = await prisma.producto.findMany({
       where: { id: { in: ids }, tenantId: sesion.tenantId },
     })
@@ -99,27 +126,71 @@ export async function crearCompraAction(data: CompraFormValues) {
     let subtotal = 0
     let iva = 0
     for (const it of d.items) {
-      const prod = mapProd.get(it.productoId)!
+      const tarifa = it.productoId ? Number(mapProd.get(it.productoId)!.ivaPorcentaje) : it.nuevo!.ivaPorcentaje
       const sub = it.cantidad * it.precioUnitario
       subtotal += sub
-      iva += sub * (Number(prod.ivaPorcentaje) / 100)
+      iva += sub * (tarifa / 100)
     }
     const total = subtotal + iva
+    let rucProveedor: string | null = null
     if (d.proveedorId) {
-      const prov = await prisma.proveedor.findFirst({ where: { id: d.proveedorId, tenantId: sesion.tenantId }, select: { id: true } })
+      const prov = await prisma.proveedor.findFirst({ where: { id: d.proveedorId, tenantId: sesion.tenantId }, select: { id: true, identificacion: true } })
       if (!prov) return { error: 'Proveedor no válido' }
+      rucProveedor = prov.identificacion
+    } else if (d.proveedorNuevo) {
+      // Proveedor del XML: se reutiliza si ya existe con ese RUC, si no se crea.
+      const existente = await prisma.proveedor.findFirst({ where: { tenantId: sesion.tenantId, identificacion: d.proveedorNuevo.ruc }, select: { id: true } })
+      d.proveedorId = existente?.id ?? (await prisma.proveedor.create({
+        data: { tenantId: sesion.tenantId, nombre: d.proveedorNuevo.nombre, identificacion: d.proveedorNuevo.ruc, direccion: d.proveedorNuevo.direccion || null },
+      })).id
+      if (!existente) await registrarLog('AUDIT', 'COMPRAS', `Proveedor creado desde XML: ${d.proveedorNuevo.nombre} (${d.proveedorNuevo.ruc})`, undefined, sesion.tenantId)
+      rucProveedor = d.proveedorNuevo.ruc
     }
     const aCredito = d.condicionPago === 'CREDITO'
     if (aCredito && !d.proveedorId) return { error: 'Una compra a crédito necesita un proveedor' }
 
+    // La misma factura no se registra dos veces (por clave de acceso o proveedor + nº).
+    if (d.claveAcceso || (d.proveedorId && d.numFactura)) {
+      const previa = await prisma.compra.findFirst({
+        where: {
+          tenantId: sesion.tenantId, estado: 'ACTIVA',
+          OR: [
+            ...(d.claveAcceso ? [{ claveAcceso: d.claveAcceso }] : []),
+            ...(d.proveedorId && d.numFactura ? [{ proveedorId: d.proveedorId, numFactura: d.numFactura }] : []),
+          ],
+        },
+        select: { numero: true },
+      })
+      if (previa) return { error: `Esta factura del proveedor ya está registrada en la compra ${previa.numero}` }
+    }
+
     // Transacción: compra + items + actualización de stock + kardex + precio compra
+    const codigosUsados = new Set<string>()
     await prisma.$transaction(async (tx) => {
+      // Productos nuevos del XML (un código de barras repetido o ya usado se omite).
+      for (const it of d.items) {
+        if (it.productoId || !it.nuevo) continue
+        let codigoBarras = it.nuevo.codigoBarras || null
+        if (codigoBarras && (codigosUsados.has(codigoBarras) ||
+          await tx.producto.findFirst({ where: { tenantId: sesion.tenantId, codigoBarras }, select: { id: true } }))) codigoBarras = null
+        if (codigoBarras) codigosUsados.add(codigoBarras)
+        const p = await tx.producto.create({
+          data: {
+            tenantId: sesion.tenantId, nombre: it.nuevo.nombre, codigoBarras,
+            precioCompra: it.precioUnitario, precioVenta: it.nuevo.precioVenta, ivaPorcentaje: it.nuevo.ivaPorcentaje, stock: 0,
+          },
+          select: { id: true },
+        })
+        it.productoId = p.id
+      }
+
       const compra = await tx.compra.create({
         data: {
           tenantId: sesion.tenantId,
           proveedorId: d.proveedorId || null,
           numero,
           numFactura: d.numFactura || null,
+          claveAcceso: d.claveAcceso || null,
           notas: d.notas || null,
           condicionPago: d.condicionPago,
           saldoPendiente: aCredito ? total : 0,
@@ -129,7 +200,7 @@ export async function crearCompraAction(data: CompraFormValues) {
           total,
           items: {
             create: d.items.map((it) => ({
-              productoId: it.productoId,
+              productoId: it.productoId!,
               cantidad: it.cantidad,
               precioUnitario: it.precioUnitario,
               subtotal: it.cantidad * it.precioUnitario,
@@ -142,14 +213,27 @@ export async function crearCompraAction(data: CompraFormValues) {
 
       for (const it of d.items) {
         await moverStock(tx, {
-          tenantId: sesion.tenantId, productoId: it.productoId,
+          tenantId: sesion.tenantId, productoId: it.productoId!,
           cantidad: it.cantidad, tipo: 'COMPRA', motivo: `Compra ${compra.numero}`,
           precioCompra: it.precioUnitario,
         })
       }
     })
 
-    await registrarLog('AUDIT', 'COMPRAS', `Compra registrada: ${numero} (total ${total.toFixed(2)})`, undefined, sesion.tenantId)
+    // Aprender equivalencias código del proveedor → producto (y unidades por empaque).
+    if (rucProveedor && /^\d{13}$/.test(rucProveedor)) {
+      for (const it of d.items) {
+        if (!it.codigoProveedor) continue
+        const factor = it.factor ?? 1
+        await prisma.productoCodigoProveedor.upsert({
+          where: { tenantId_proveedorRuc_codigo: { tenantId: sesion.tenantId, proveedorRuc: rucProveedor, codigo: it.codigoProveedor } },
+          create: { tenantId: sesion.tenantId, proveedorRuc: rucProveedor, codigo: it.codigoProveedor, productoId: it.productoId!, factor },
+          update: { productoId: it.productoId!, factor },
+        }).catch((e) => registrarLog('WARN', 'COMPRAS', `No se guardó la equivalencia ${it.codigoProveedor}: ${e.message || e}`, undefined, sesion.tenantId))
+      }
+    }
+
+    await registrarLog('AUDIT', 'COMPRAS', `Compra registrada: ${numero} (total ${total.toFixed(2)})${d.claveAcceso ? ' desde XML' : ''}${nuevos ? `, ${nuevos} producto(s) nuevo(s)` : ''}`, undefined, sesion.tenantId)
     revalidatePath('/compras')
     revalidatePath('/productos')
     return { success: true, numero }

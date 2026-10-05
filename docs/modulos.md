@@ -70,6 +70,9 @@ Portada de GABLIMADOS (en producción real), adaptada a `Venta` y multitenant, c
 - **ADMIN** (dueño): gestiona todo.
 - **USER** (cajero): POS y consulta; no edita productos, compras, gastos ni anula.
 
+## Compras desde factura electrónica
+En "Nueva compra": subir el XML del proveedor o escribir/escanear la clave de acceso (se descarga del SRI). Se llenan proveedor (o se crea), nº de factura y productos (reconocidos por compras anteriores, código de barras o nombre; los demás se asignan o se crean). «Unid. x empaque» convierte cajas en unidades y se recuerda por proveedor. No permite registrar dos veces la misma factura.
+
 ## SaaS: planes, suscripciones y registro
 - `/registro` (público): solicitud de alta con plan, datos del negocio y del ADMIN; enlace privado para subir el comprobante y ver el estado.
 - `/superadmin`: minimarkets (estado efectivo, plan, vencimiento), alta manual, detalle (plan, pagos, vencimiento, suspender/cancelar, usuarios), `/superadmin/solicitudes` (verificar pago, aprobar, rechazar), `/superadmin/planes`, `/superadmin/configuracion` (RUC Proveedor, datos de pago, contraseña).
