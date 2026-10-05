@@ -169,11 +169,11 @@ export function ProductoForm({
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Stock</label>
-              <input type="number" step="0.001" min="0" value={form.stock} onChange={(e) => set('stock', e.target.value)} className="input" />
+              <input type="number" step="any" min="0" value={form.stock} onChange={(e) => set('stock', e.target.value)} className="input" />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Stock mínimo</label>
-              <input type="number" step="0.001" min="0" value={form.stockMinimo} onChange={(e) => set('stockMinimo', e.target.value)} className="input" />
+              <input type="number" step="any" min="0" value={form.stockMinimo} onChange={(e) => set('stockMinimo', e.target.value)} className="input" />
             </div>
           </div>
 

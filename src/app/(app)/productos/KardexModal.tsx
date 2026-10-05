@@ -135,7 +135,7 @@ export function KardexModal({ productoId, puedeEditar, onClose }: { productoId: 
               <p className="text-xs text-gray-500 dark:text-gray-400">{modoActual.ayuda}</p>
               <div className="space-y-1.5">
                 <label className={lbl} htmlFor="aj-cantidad">{modo === 'CONTEO' ? `Stock contado (${datos.producto.unidad})` : `Cantidad (${datos.producto.unidad})`}</label>
-                <input id="aj-cantidad" type="number" step="0.001" min="0" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="input" required />
+                <input id="aj-cantidad" type="number" step="any" min="0" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="input" required />
                 {modo === 'CONTEO' && cantidad !== '' && (
                   <p className="text-xs text-gray-500">Diferencia: <strong>{(() => { const d = Number(cantidad) - datos.producto.stock; return `${d > 0 ? '+' : ''}${num(d)}` })()}</strong></p>
                 )}

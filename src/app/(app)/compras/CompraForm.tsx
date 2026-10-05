@@ -135,7 +135,7 @@ export function CompraForm({
                   <option value="">Producto...</option>
                   {productos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
-                <input type="number" step="0.001" min="0" value={l.cantidad} onChange={(e) => setLinea(i, 'cantidad', e.target.value)} className="input w-20" placeholder="Cant." title="Cantidad" />
+                <input type="number" step="any" min="0" value={l.cantidad} onChange={(e) => setLinea(i, 'cantidad', e.target.value)} className="input w-20" placeholder="Cant." title="Cantidad" />
                 <input type="number" step="0.0001" min="0" value={l.precioUnitario} onChange={(e) => setLinea(i, 'precioUnitario', e.target.value)} className="input w-24" placeholder="P. compra" title="Precio unitario" />
                 <input type="date" value={l.fechaVencimiento} onChange={(e) => setLinea(i, 'fechaVencimiento', e.target.value)} className="input w-36" title="Fecha de vencimiento (opcional)" aria-label="Fecha de vencimiento" />
                 <button type="button" onClick={() => quitarLinea(i)} className="p-2 text-gray-400 hover:text-red-500 shrink-0" disabled={lineas.length === 1}><Trash2 size={16} /></button>
