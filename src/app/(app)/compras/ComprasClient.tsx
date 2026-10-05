@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Plus, Truck, Search, Eye } from 'lucide-react'
+import { Plus, Truck, Search, Eye, ClipboardList } from 'lucide-react'
+import Link from 'next/link'
 import { CompraForm } from './CompraForm'
 import { CompraDetalle } from './CompraDetalle'
 
@@ -40,9 +41,12 @@ export function ComprasClient({
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{compras.length} compra(s) registrada(s)</p>
         </div>
         {puedeEditar && (
-          <button onClick={() => setModal(true)} className="btn-primary" disabled={productos.length === 0}>
-            <Plus size={16} /> Nueva compra
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/compras/pedido" className="btn-ghost"><ClipboardList size={16} /> Pedido sugerido</Link>
+            <button onClick={() => setModal(true)} className="btn-primary" disabled={productos.length === 0}>
+              <Plus size={16} /> Nueva compra
+            </button>
+          </div>
         )}
       </div>
 
