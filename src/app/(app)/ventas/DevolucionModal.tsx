@@ -23,6 +23,7 @@ export function DevolucionModal({ ventaId, onClose }: { ventaId: string; onClose
   const [reembolso, setReembolso] = useState<Reembolso>('EFECTIVO')
   const [reingresa, setReingresa] = useState(true)
   const [enviando, setEnviando] = useState(false)
+  const [modo, setModo] = useState<'TOTAL' | 'PARCIAL'>('PARCIAL')
 
   useEffect(() => {
     let vigente = true
@@ -49,6 +50,7 @@ export function DevolucionModal({ ventaId, onClose }: { ventaId: string; onClose
 
   const disponible = (l: Datos['lineas'][number]) => Math.max(0, l.cantidad - l.devuelto.cantidad)
   const todo = () => datos && setCantidades(Object.fromEntries(datos.lineas.map((l) => [l.id, disponible(l) > 0 ? num(disponible(l)) : ''])))
+  const elegirModo = (m: 'TOTAL' | 'PARCIAL') => { setModo(m); if (m === 'TOTAL') todo(); else setCantidades({}) }
 
   const bloqueo = !datos ? null
     : datos.venta.estado !== 'COMPLETADA' ? 'La venta está anulada.'
@@ -93,6 +95,15 @@ export function DevolucionModal({ ventaId, onClose }: { ventaId: string; onClose
               <p className="rounded-xl border border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-300 flex gap-2"><AlertTriangle size={16} className="shrink-0 mt-0.5" />{bloqueo}</p>
             ) : (
               <>
+                <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo de devolución">
+                  {([['TOTAL', 'Devolver todo', datos.venta.totalDevuelto > 0 ? 'Todo lo que aún no se ha devuelto' : 'Todos los productos de la venta'], ['PARCIAL', 'Elegir productos', 'Solo algunos productos o cantidades']] as const).map(([k, t, d]) => (
+                    <button key={k} type="button" role="radio" aria-checked={modo === k} onClick={() => elegirModo(k)}
+                      className={`text-left rounded-xl border p-3 transition ${modo === k ? 'border-brand-600 ring-2 ring-brand-600/20 bg-brand-50/50 dark:bg-brand-500/10' : 'border-gray-200 dark:border-white/10 hover:border-brand-400'}`}>
+                      <p className="font-semibold text-sm text-gray-900 dark:text-white">{t}</p>
+                      <p className="text-xs text-gray-500">{d}</p>
+                    </button>
+                  ))}
+                </div>
                 <div className="rounded-xl border border-gray-100 dark:border-white/5 overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -111,7 +122,7 @@ export function DevolucionModal({ ventaId, onClose }: { ventaId: string; onClose
                             <td className="px-3 py-2 text-right text-gray-500">{l.devuelto.cantidad > 0 ? num(l.devuelto.cantidad) : '—'}</td>
                             <td className="px-3 py-2 text-right">
                               {max > 0.0005 ? (
-                                <input type="number" step="any" min="0" max={max} value={cantidades[l.id] ?? ''} placeholder="0"
+                                <input type="number" step="any" min="0" max={max} value={cantidades[l.id] ?? ''} placeholder="0" disabled={modo === 'TOTAL'}
                                   onChange={(e) => setCantidades((c) => ({ ...c, [l.id]: e.target.value }))}
                                   className="input h-9 w-24 text-right ml-auto" aria-label={`Cantidad a devolver de ${l.nombre} (máx. ${num(max)})`} />
                               ) : <span className="text-xs text-gray-400">completo</span>}
@@ -122,7 +133,6 @@ export function DevolucionModal({ ventaId, onClose }: { ventaId: string; onClose
                     </tbody>
                   </table>
                 </div>
-                <button type="button" onClick={todo} className="text-xs text-brand-600 dark:text-brand-400 hover:underline">Devolver todo lo que queda</button>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
