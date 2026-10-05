@@ -2,14 +2,16 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Banknote, CreditCard, ArrowLeftRight, Wallet, Loader2, CheckCircle2, Calculator, DoorOpen } from 'lucide-react'
+import { Banknote, CreditCard, ArrowLeftRight, Wallet, Loader2, CheckCircle2, Calculator, DoorOpen, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
 import { toast } from 'sonner'
-import { registrarCierreAction, abrirCajaAction } from './actions'
+import { registrarCierreAction, abrirCajaAction, registrarMovimientoCajaAction } from './actions'
 
 interface Resumen {
   totalVentas: number; ventasEfectivo: number; ventasTarjeta: number; ventasTransfer: number
   totalVendido: number; gastosEfectivo: number; fondoInicial: number; efectivoEsperado: number
   ventasCredito: number; abonosEfectivo: number; abonosOtros: number; pagosProveedorEfectivo: number
+  ingresosEfectivo: number; retirosEfectivo: number
+  movimientos: { id: string; tipo: string; monto: number; motivo: string; usuario: string; fecha: string }[]
 }
 interface Apertura { id: string; usuario: string; fondoInicial: number; abiertaAt: string }
 interface Cierre {
@@ -26,6 +28,20 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
   const [contado, setContado] = useState('')
   const [notas, setNotas] = useState('')
   const [loading, setLoading] = useState(false)
+  // Retiro / ingreso de efectivo durante el turno
+  const [mov, setMov] = useState<{ tipo: 'RETIRO' | 'INGRESO'; monto: string; motivo: string } | null>(null)
+  const [guardandoMov, setGuardandoMov] = useState(false)
+  const guardarMovimiento = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!mov) return
+    setGuardandoMov(true)
+    try {
+      const r = await registrarMovimientoCajaAction({ tipo: mov.tipo, monto: Number(mov.monto), motivo: mov.motivo })
+      if ('error' in r) { toast.error(r.error); return }
+      toast.success(`${mov.tipo === 'RETIRO' ? 'Retiro' : 'Ingreso'} de ${money(Number(mov.monto))} registrado`)
+      setMov(null); router.refresh()
+    } finally { setGuardandoMov(false) }
+  }
   const money = (n: number) => `$${n.toFixed(2)}`
   const fecha = (iso: string) => new Date(iso).toLocaleString('es-EC', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -103,6 +119,55 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
         ))}
       </div>
 
+      {/* Movimientos de efectivo del turno */}
+      {apertura && (
+        <div className="card space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2"><Wallet size={16} className="text-brand-600" /> Movimientos de efectivo</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Retiros (a la caja fuerte, entrega al dueño) e ingresos (más cambio) durante el turno. Entran al arqueo.</p>
+            </div>
+            {!mov && (
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setMov({ tipo: 'RETIRO', monto: '', motivo: '' })} className="btn-ghost text-sm border border-gray-200 dark:border-white/10"><ArrowUpFromLine size={15} /> Retiro</button>
+                <button type="button" onClick={() => setMov({ tipo: 'INGRESO', monto: '', motivo: '' })} className="btn-ghost text-sm border border-gray-200 dark:border-white/10"><ArrowDownToLine size={15} /> Ingreso</button>
+              </div>
+            )}
+          </div>
+          {mov && (
+            <form onSubmit={guardarMovimiento} className={`rounded-xl border p-3 flex flex-col sm:flex-row sm:items-end gap-2 ${mov.tipo === 'RETIRO' ? 'border-amber-200 dark:border-amber-500/20 bg-amber-50/50 dark:bg-amber-500/5' : 'border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-500/5'}`}>
+              <div className="space-y-1">
+                <label htmlFor="mc-monto" className="text-xs font-semibold text-gray-500 dark:text-gray-400">{mov.tipo === 'RETIRO' ? 'Monto a retirar' : 'Monto que ingresa'}</label>
+                <input id="mc-monto" type="number" step="0.01" min="0.01" value={mov.monto} onChange={(e) => setMov({ ...mov, monto: e.target.value })} className="input sm:w-36" required autoFocus />
+              </div>
+              <div className="space-y-1 flex-1">
+                <label htmlFor="mc-motivo" className="text-xs font-semibold text-gray-500 dark:text-gray-400">Motivo</label>
+                <input id="mc-motivo" value={mov.motivo} onChange={(e) => setMov({ ...mov, motivo: e.target.value })} className="input" maxLength={200} required
+                  placeholder={mov.tipo === 'RETIRO' ? 'Ej. entregado a Juan (dueño) / a la caja fuerte' : 'Ej. cambio en monedas traído del banco'} />
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setMov(null)} className="btn-ghost" disabled={guardandoMov}>Cancelar</button>
+                <button type="submit" className="btn-primary" disabled={guardandoMov}>{guardandoMov ? <Loader2 size={16} className="animate-spin" /> : mov.tipo === 'RETIRO' ? <ArrowUpFromLine size={16} /> : <ArrowDownToLine size={16} />} Registrar</button>
+              </div>
+            </form>
+          )}
+          {resumen.movimientos.length > 0 ? (
+            <ul className="divide-y divide-gray-50 dark:divide-white/5 text-sm">
+              {resumen.movimientos.map((m) => (
+                <li key={m.id} className="flex items-center gap-3 py-2">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${m.tipo === 'RETIRO' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'}`}>{m.tipo}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-900 dark:text-white truncate">{m.motivo}</p>
+                    <p className="text-xs text-gray-400">{fecha(m.fecha)} · {m.usuario}</p>
+                  </div>
+                  <span className={`font-semibold shrink-0 ${m.tipo === 'RETIRO' ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{m.tipo === 'RETIRO' ? '−' : '+'}{money(m.monto)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : !mov && <p className="text-xs text-gray-400">Sin movimientos en este turno.</p>}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Arqueo de efectivo */}
         <div className="card space-y-4">
@@ -115,9 +180,15 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
             {resumen.abonosEfectivo > 0 && (
               <div className="flex justify-between text-gray-500"><span>+ Cobros de fiado en efectivo</span><span>{money(resumen.abonosEfectivo)}</span></div>
             )}
+            {resumen.ingresosEfectivo > 0 && (
+              <div className="flex justify-between text-gray-500"><span>+ Ingresos de efectivo</span><span>{money(resumen.ingresosEfectivo)}</span></div>
+            )}
             <div className="flex justify-between text-gray-500"><span>− Gastos pagados en efectivo</span><span>−{money(resumen.gastosEfectivo)}</span></div>
             {resumen.pagosProveedorEfectivo > 0 && (
               <div className="flex justify-between text-gray-500"><span>− Pagos a proveedores en efectivo</span><span>−{money(resumen.pagosProveedorEfectivo)}</span></div>
+            )}
+            {resumen.retirosEfectivo > 0 && (
+              <div className="flex justify-between text-gray-500"><span>− Retiros de efectivo</span><span>−{money(resumen.retirosEfectivo)}</span></div>
             )}
             <div className="flex justify-between font-bold text-gray-900 dark:text-white border-t border-gray-100 dark:border-white/5 pt-2">
               <span>Efectivo esperado en caja</span><span>{money(resumen.efectivoEsperado)}</span>

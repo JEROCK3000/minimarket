@@ -534,6 +534,8 @@ model CierreCaja {
   gastosEfectivo         Decimal  @default(0) @db.Decimal(12, 2)
   abonosEfectivo         Decimal  @default(0) @db.Decimal(12, 2) // cobros de fiado recibidos en efectivo
   pagosProveedorEfectivo Decimal  @default(0) @db.Decimal(12, 2) // pagos a proveedores en efectivo (salen de caja)
+  ingresosEfectivo       Decimal  @default(0) @db.Decimal(12, 2) // ingresos de efectivo durante el turno (cambio adicional…)
+  retirosEfectivo        Decimal  @default(0) @db.Decimal(12, 2) // retiros de efectivo durante el turno (a caja fuerte, al dueño…)
   efectivoEsperado       Decimal  @default(0) @db.Decimal(12, 2) // fondo + efectivo ventas + abonos efectivo − gastos
   efectivoContado        Decimal  @default(0) @db.Decimal(12, 2) // lo que contó físicamente
   diferencia             Decimal  @default(0) @db.Decimal(12, 2) // contado − esperado
@@ -690,4 +692,22 @@ model TomaInventarioItem {
   @@unique([tomaId, productoId])
   @@index([productoId])
   @@map("tomas_inventario_items")
+}
+
+/// Retiros e ingresos de efectivo durante el turno (no son ventas ni gastos):
+/// llevar billetes a la caja fuerte, entregar al dueño, traer cambio. Entran al
+/// cuadre del cierre. No se borran: un error se corrige con el movimiento contrario.
+model MovimientoCaja {
+  id            String   @id @default(cuid())
+  tenantId      String
+  aperturaId    String?
+  tipo          String   @db.VarChar(10) // RETIRO | INGRESO
+  monto         Decimal  @db.Decimal(12, 2)
+  motivo        String   @db.VarChar(200)
+  usuarioId     String?
+  usuarioNombre String   @db.VarChar(120)
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@map("movimientos_caja")
 }

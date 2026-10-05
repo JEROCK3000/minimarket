@@ -5,7 +5,8 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { obtenerEstadoCaja } from '@/lib/caja/estado'
+import { obtenerEstadoCaja, cajaAbierta } from '@/lib/caja/estado'
+import { bloqueoPorSuscripcion } from '@/lib/saas/suscripcion'
 
 const aperturaSchema = z.object({
   fondoInicial: z.coerce.number().min(0, 'El fondo no puede ser negativo').max(100000, 'Monto demasiado alto'),
@@ -72,6 +73,8 @@ export async function registrarCierreAction(data: { efectivoContado: number; not
           gastosEfectivo: r.gastosEfectivo,
           abonosEfectivo: r.abonosEfectivo,
           pagosProveedorEfectivo: r.pagosProveedorEfectivo,
+          ingresosEfectivo: r.ingresosEfectivo,
+          retirosEfectivo: r.retirosEfectivo,
           efectivoEsperado: r.efectivoEsperado,
           efectivoContado: contado,
           diferencia,
@@ -91,5 +94,44 @@ export async function registrarCierreAction(data: { efectivoContado: number; not
   } catch (error: any) {
     await registrarLog('ERROR', 'CAJA', `Error registrando cierre: ${error.message || error}`, undefined, sesion.tenantId)
     return { error: 'No se pudo registrar el cierre' }
+  }
+}
+
+const movimientoSchema = z.object({
+  tipo: z.enum(['RETIRO', 'INGRESO']),
+  monto: z.coerce.number().positive('El monto debe ser mayor a cero').max(100000, 'Monto demasiado alto'),
+  motivo: z.string().trim().min(3, 'Indica el motivo').max(200),
+})
+
+/**
+ * Retiro o ingreso de efectivo con la caja abierta (cualquier usuario; queda
+ * con su nombre). Un retiro no puede superar el efectivo que debería haber.
+ * No se eliminan: un error se corrige con el movimiento contrario.
+ */
+export async function registrarMovimientoCajaAction(data: z.infer<typeof movimientoSchema>) {
+  const sesion = await requerirTenant()
+  const bloqueo = await bloqueoPorSuscripcion(sesion.tenantId)
+  if (bloqueo) return { error: bloqueo }
+  const parsed = movimientoSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
+  const d = parsed.data
+  try {
+    const apertura = await cajaAbierta(sesion.tenantId)
+    if (!apertura) return { error: 'La caja está cerrada: ábrela para registrar movimientos de efectivo' }
+    if (d.tipo === 'RETIRO') {
+      const { resumen } = await obtenerEstadoCaja(sesion.tenantId)
+      if (d.monto > resumen.efectivoEsperado + 0.005) {
+        return { error: `No puedes retirar más del efectivo que debería haber en caja ($${resumen.efectivoEsperado.toFixed(2)})` }
+      }
+    }
+    await prisma.movimientoCaja.create({
+      data: { tenantId: sesion.tenantId, aperturaId: apertura.id, tipo: d.tipo, monto: d.monto, motivo: d.motivo, usuarioId: sesion.sub, usuarioNombre: sesion.nombre },
+    })
+    await registrarLog('AUDIT', 'CAJA', `${d.tipo === 'RETIRO' ? 'Retiro' : 'Ingreso'} de efectivo $${d.monto.toFixed(2)} por ${sesion.nombre}: ${d.motivo}`, undefined, sesion.tenantId)
+    revalidatePath('/caja')
+    return { success: true }
+  } catch (error: any) {
+    await registrarLog('ERROR', 'CAJA', `Error registrando movimiento de caja: ${error.message || error}`, undefined, sesion.tenantId)
+    return { error: 'No se pudo registrar el movimiento' }
   }
 }

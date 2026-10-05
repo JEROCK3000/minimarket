@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db/prisma'
 
 /** Calcula el resumen de caja de un período, sumando el fondo inicial al efectivo esperado. */
 export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: Date, fondoInicial = 0) {
-  const [ventas, gastos, abonos, pagosProv] = await Promise.all([
+  const [ventas, gastos, abonos, pagosProv, movimientos] = await Promise.all([
     prisma.venta.findMany({
       where: { tenantId, estado: 'COMPLETADA', fecha: { gte: desde, lte: hasta } },
       select: { formaPago: true, total: true },
@@ -28,6 +28,12 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
       where: { tenantId, formaPago: 'EFECTIVO', createdAt: { gte: desde, lte: hasta } },
       _sum: { monto: true },
     }),
+    // Retiros e ingresos de efectivo durante el turno.
+    prisma.movimientoCaja.findMany({
+      where: { tenantId, createdAt: { gte: desde, lte: hasta } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, tipo: true, monto: true, motivo: true, usuarioNombre: true, createdAt: true },
+    }),
   ])
 
   let efectivo = 0, tarjeta = 0, transfer = 0, credito = 0
@@ -43,6 +49,9 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
   const pagosProveedorEfectivo = Number(pagosProv._sum.monto ?? 0)
   const abonosOtros = abonos.filter((a) => a.formaPago !== 'EFECTIVO').reduce((s, a) => s + Number(a._sum.monto ?? 0), 0)
   const gastosEfectivo = Number(gastos._sum.monto ?? 0)
+  const sumaMov = (t: string) => movimientos.filter((m) => m.tipo === t).reduce((s, m) => s + Number(m.monto), 0)
+  const ingresosEfectivo = sumaMov('INGRESO')
+  const retirosEfectivo = sumaMov('RETIRO')
 
   return {
     totalVentas: ventas.length,
@@ -56,7 +65,10 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
     pagosProveedorEfectivo,
     gastosEfectivo,
     fondoInicial,
-    efectivoEsperado: fondoInicial + efectivo + abonosEfectivo - gastosEfectivo - pagosProveedorEfectivo,
+    ingresosEfectivo,
+    retirosEfectivo,
+    movimientos: movimientos.map((m) => ({ id: m.id, tipo: m.tipo, monto: Number(m.monto), motivo: m.motivo, usuario: m.usuarioNombre, fecha: m.createdAt.toISOString() })),
+    efectivoEsperado: fondoInicial + efectivo + abonosEfectivo + ingresosEfectivo - gastosEfectivo - pagosProveedorEfectivo - retirosEfectivo,
   }
 }
 
