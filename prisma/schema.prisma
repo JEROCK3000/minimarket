@@ -441,10 +441,13 @@ model Venta {
   fecha           DateTime    @default(now())
   createdAt       DateTime    @default(now())
 
-  items       VentaItem[]
-  factura     FacturaSRI?
-  notaCredito NotaCredito?
-  abonos      AbonoVenta[]
+  totalDevuelto Decimal @default(0) @db.Decimal(12, 2) // suma de devoluciones parciales
+
+  items        VentaItem[]
+  factura      FacturaSRI?
+  notasCredito NotaCredito[]
+  devoluciones Devolucion[]
+  abonos       AbonoVenta[]
 
   @@index([tenantId])
   @@index([clienteId])
@@ -489,6 +492,8 @@ model VentaItem {
   precioUnitario Decimal  @db.Decimal(10, 4)
   subtotal       Decimal  @db.Decimal(12, 2)
   costoUnitario  Decimal? @db.Decimal(10, 4) // precio de compra al vender (utilidad real); NULL en ventas antiguas
+
+  devolucionItems DevolucionItem[]
 
   @@index([ventaId])
   @@map("venta_items")
@@ -536,6 +541,7 @@ model CierreCaja {
   pagosProveedorEfectivo Decimal  @default(0) @db.Decimal(12, 2) // pagos a proveedores en efectivo (salen de caja)
   ingresosEfectivo       Decimal  @default(0) @db.Decimal(12, 2) // ingresos de efectivo durante el turno (cambio adicional…)
   retirosEfectivo        Decimal  @default(0) @db.Decimal(12, 2) // retiros de efectivo durante el turno (a caja fuerte, al dueño…)
+  devolucionesEfectivo   Decimal  @default(0) @db.Decimal(12, 2) // dinero devuelto a clientes en efectivo
   efectivoEsperado       Decimal  @default(0) @db.Decimal(12, 2) // fondo + efectivo ventas + abonos efectivo − gastos
   efectivoContado        Decimal  @default(0) @db.Decimal(12, 2) // lo que contó físicamente
   diferencia             Decimal  @default(0) @db.Decimal(12, 2) // contado − esperado
@@ -612,10 +618,15 @@ model FacturaSRI {
 
 // Nota de crédito: anula/modifica una factura ya autorizada por el SRI (codDoc 04)
 model NotaCredito {
-  id       String @id @default(cuid())
-  tenantId String
-  ventaId  String @unique // factura/venta que modifica
-  venta    Venta  @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  id              String  @id @default(cuid())
+  tenantId        String
+  ventaId         String // factura/venta que modifica (puede tener varias NC parciales)
+  venta           Venta   @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  tipo            String  @default("TOTAL") @db.VarChar(10) // TOTAL (anula la factura) | PARCIAL (devolución)
+  // NC parcial autorizada: la devolución que respalda
+  devolucionId    String? @unique
+  // NC parcial que quedó PENDIENTE en el SRI: lo pedido, para aplicarlo al autorizarse
+  datosPendientes Json?
 
   claveAcceso        String    @db.VarChar(49)
   numeroAutorizacion String?   @db.VarChar(49)
@@ -629,6 +640,7 @@ model NotaCredito {
   updatedAt          DateTime  @updatedAt
 
   @@index([tenantId])
+  @@index([ventaId])
   @@map("notas_credito")
 }
 
@@ -710,4 +722,49 @@ model MovimientoCaja {
 
   @@index([tenantId, createdAt])
   @@map("movimientos_caja")
+}
+
+/// Devolución parcial de una venta (DEV-00001): ticket o factura. En facturas
+/// autorizadas la respalda una NotaCredito parcial (NotaCredito.devolucionId).
+model Devolucion {
+  id             String   @id @default(cuid())
+  tenantId       String
+  ventaId        String
+  venta          Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  numero         String   @db.VarChar(20)
+  motivo         String   @db.VarChar(300)
+  subtotal       Decimal  @db.Decimal(12, 2) // antes de descuento
+  descuento      Decimal  @db.Decimal(12, 2)
+  iva            Decimal  @db.Decimal(12, 2)
+  total          Decimal  @db.Decimal(12, 2)
+  formaReembolso String   @db.VarChar(20) // EFECTIVO | TARJETA | TRANSFERENCIA | SALDO (descuenta del fiado)
+  reingresaStock Boolean  @default(true) // false: el producto volvió dañado (queda como merma)
+  usuarioNombre  String   @db.VarChar(120)
+  createdAt      DateTime @default(now())
+
+  items DevolucionItem[]
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, createdAt])
+  @@index([ventaId])
+  @@map("devoluciones")
+}
+
+model DevolucionItem {
+  id             String     @id @default(cuid())
+  devolucionId   String
+  devolucion     Devolucion @relation(fields: [devolucionId], references: [id], onDelete: Cascade)
+  ventaItemId    String
+  ventaItem      VentaItem  @relation(fields: [ventaItemId], references: [id])
+  productoId     String
+  cantidad       Decimal    @db.Decimal(10, 3)
+  precioUnitario Decimal    @db.Decimal(10, 4)
+  descuento      Decimal    @db.Decimal(12, 2)
+  base           Decimal    @db.Decimal(12, 2)
+  ivaPorcentaje  Decimal    @db.Decimal(5, 2)
+  iva            Decimal    @db.Decimal(12, 2)
+
+  @@index([devolucionId])
+  @@index([ventaItemId])
+  @@map("devolucion_items")
 }

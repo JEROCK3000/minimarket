@@ -10,7 +10,7 @@ interface Resumen {
   totalVentas: number; ventasEfectivo: number; ventasTarjeta: number; ventasTransfer: number
   totalVendido: number; gastosEfectivo: number; fondoInicial: number; efectivoEsperado: number
   ventasCredito: number; abonosEfectivo: number; abonosOtros: number; pagosProveedorEfectivo: number
-  ingresosEfectivo: number; retirosEfectivo: number
+  ingresosEfectivo: number; retirosEfectivo: number; devolucionesEfectivo: number; devolucionesTotal: number
   movimientos: { id: string; tipo: string; monto: number; motivo: string; usuario: string; fecha: string }[]
 }
 interface Apertura { id: string; usuario: string; fondoInicial: number; abiertaAt: string }
@@ -187,6 +187,9 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
             {resumen.pagosProveedorEfectivo > 0 && (
               <div className="flex justify-between text-gray-500"><span>− Pagos a proveedores en efectivo</span><span>−{money(resumen.pagosProveedorEfectivo)}</span></div>
             )}
+            {resumen.devolucionesEfectivo > 0 && (
+              <div className="flex justify-between text-gray-500"><span>− Devoluciones a clientes en efectivo</span><span>−{money(resumen.devolucionesEfectivo)}</span></div>
+            )}
             {resumen.retirosEfectivo > 0 && (
               <div className="flex justify-between text-gray-500"><span>− Retiros de efectivo</span><span>−{money(resumen.retirosEfectivo)}</span></div>
             )}
@@ -221,6 +224,7 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
               <div>
                 <p className="text-2xl font-black text-gray-900 dark:text-white">{money(resumen.totalVendido)}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Total vendido en el período (todas las formas de pago)</p>
+                {resumen.devolucionesTotal > 0 && <p className="text-xs text-red-500 mt-0.5">Devoluciones del período: −{money(resumen.devolucionesTotal)}</p>}
                 {(resumen.ventasCredito > 0 || resumen.abonosOtros > 0) && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {resumen.ventasCredito > 0 && <>Fiado: {money(resumen.ventasCredito)} (por cobrar)</>}

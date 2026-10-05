@@ -75,6 +75,7 @@ export async function registrarCierreAction(data: { efectivoContado: number; not
           pagosProveedorEfectivo: r.pagosProveedorEfectivo,
           ingresosEfectivo: r.ingresosEfectivo,
           retirosEfectivo: r.retirosEfectivo,
+          devolucionesEfectivo: r.devolucionesEfectivo,
           efectivoEsperado: r.efectivoEsperado,
           efectivoContado: contado,
           diferencia,

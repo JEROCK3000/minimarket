@@ -34,6 +34,21 @@ export async function GET(request: NextRequest) {
         porProducto.set(it.productoId, a)
       })
     }
+    // Devoluciones del período: restan la venta; el costo vuelve solo si el producto
+    // regresó al inventario (si volvió dañado, el costo queda como pérdida).
+    const devueltos = await prisma.devolucionItem.findMany({
+      where: { devolucion: { tenantId: ctx.sesion.tenantId, createdAt: { gte: desde, lte: hasta } } },
+      include: { devolucion: { select: { reingresaStock: true } }, ventaItem: { select: { costoUnitario: true, producto: { select: { nombre: true, precioCompra: true } } } } },
+    })
+    for (const d of devueltos) {
+      const cant = Number(d.cantidad)
+      const costoU = d.ventaItem.costoUnitario != null ? Number(d.ventaItem.costoUnitario) : Number(d.ventaItem.producto.precioCompra)
+      const a = porProducto.get(d.productoId) ?? { nombre: d.ventaItem.producto.nombre, cantidad: 0, venta: 0, costo: 0, costoEstimado: false }
+      a.cantidad -= cant
+      a.venta -= Number(d.base)
+      if (d.devolucion.reingresaStock) a.costo -= cant * costoU
+      porProducto.set(d.productoId, a)
+    }
     const filas = [...porProducto.values()]
       .map((p) => ({ ...p, utilidad: p.venta - p.costo }))
       .sort((a, b) => b.utilidad - a.utilidad)
@@ -44,7 +59,7 @@ export async function GET(request: NextRequest) {
     return responderReporte({
       formato: formatoDe(sp), empresa: ctx.empresa, archivo: 'utilidad_por_producto', orientacion: 'landscape',
       titulo: 'Utilidad y margen por producto',
-      subtitulo: `${txt} | Ventas sin IVA y con descuentos${hayEstimados ? ' | * costo estimado con el precio de compra actual (ventas anteriores a sept-2026)' : ''}`,
+      subtitulo: `${txt} | Ventas sin IVA, con descuentos y menos devoluciones${hayEstimados ? ' | * costo estimado con el precio de compra actual (ventas anteriores a sept-2026)' : ''}`,
       columnas: [
         { header: 'Producto', ancho: 34 }, { header: 'Cantidad', tipo: 'numero', ancho: 11 },
         { header: 'Venta neta', tipo: 'moneda', ancho: 14 }, { header: 'Costo', tipo: 'moneda', ancho: 14 },

@@ -39,6 +39,14 @@ export default async function DashboardPage() {
     }),
   ])
 
+  // Devoluciones parciales: se restan en el período en que ocurren (ventas netas).
+  const [devHoy, devMes] = await Promise.all([
+    prisma.devolucion.aggregate({ where: { tenantId: t, createdAt: { gte: hoy } }, _sum: { total: true } }),
+    prisma.devolucion.aggregate({ where: { tenantId: t, createdAt: { gte: inicioMes } }, _sum: { total: true } }),
+  ])
+  const devueltoHoy = Number(devHoy._sum.total ?? 0)
+  const devueltoMes = Number(devMes._sum.total ?? 0)
+
   const bajoStock = productosBajoStock.filter((p) => Number(p.stock) <= Number(p.stockMinimo))
 
   // ─── Datos para las gráficas ──────────────────────────────────────────────
@@ -78,12 +86,12 @@ export default async function DashboardPage() {
   const mapNombre = new Map(nombres.map((n) => [n.id, n.nombre]))
 
   const money = (n: number) => `$${n.toFixed(2)}`
-  const totalVentasMes = Number(ventasMes._sum.total ?? 0)
+  const totalVentasMes = Number(ventasMes._sum.total ?? 0) - devueltoMes
   const totalGastosMes = Number(gastosMes._sum.monto ?? 0)
 
   const kpis = [
-    { label: 'Ventas de hoy', valor: money(Number(ventasHoy._sum.total ?? 0)), sub: `${ventasHoy._count} venta(s)`, icon: DollarSign, color: 'text-green-600 bg-green-50 dark:bg-green-500/10' },
-    { label: 'Ventas del mes', valor: money(totalVentasMes), sub: `${ventasMes._count} venta(s)`, icon: ShoppingCart, color: 'text-brand-600 bg-brand-50 dark:bg-brand-500/10' },
+    { label: 'Ventas de hoy', valor: money(Number(ventasHoy._sum.total ?? 0) - devueltoHoy), sub: `${ventasHoy._count} venta(s)${devueltoHoy > 0 ? ` · −${money(devueltoHoy)} devuelto` : ''}`, icon: DollarSign, color: 'text-green-600 bg-green-50 dark:bg-green-500/10' },
+    { label: 'Ventas del mes', valor: money(totalVentasMes), sub: `${ventasMes._count} venta(s)${devueltoMes > 0 ? ` · −${money(devueltoMes)} devuelto` : ''}`, icon: ShoppingCart, color: 'text-brand-600 bg-brand-50 dark:bg-brand-500/10' },
     { label: 'Gastos del mes', valor: money(totalGastosMes), sub: 'egresos', icon: Wallet, color: 'text-amber-600 bg-amber-50 dark:bg-amber-500/10' },
     { label: 'Balance del mes', valor: money(totalVentasMes - totalGastosMes), sub: 'ventas − gastos', icon: TrendingUp, color: 'text-purple-600 bg-purple-50 dark:bg-purple-500/10' },
   ]

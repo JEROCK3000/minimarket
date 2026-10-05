@@ -1,13 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { Receipt, FileText, Loader2, CheckCircle2, AlertCircle, Clock, Download, Mail, Eye, Ban, FileMinus, Printer } from 'lucide-react'
+import { Receipt, FileText, Loader2, CheckCircle2, AlertCircle, Clock, Download, Mail, Eye, Ban, FileMinus, Printer, Undo2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { emitirFacturaVentaAction } from './sri-actions'
 import { descargarRideAction, enviarFacturaEmailAction, descargarRideNCAction, enviarNCEmailAction } from './factura-actions'
 import { anularVentaAction } from './actions'
 import { obtenerVistaPreviaFacturaAction } from './preview-actions'
 import { emitirNotaCreditoAction } from './nc-actions'
+import { consultarDevolucionPendienteAction } from './devolucion-actions'
+import { DevolucionModal } from './DevolucionModal'
+import { useRouter } from 'next/navigation'
 import { obtenerTicketAction } from '../pos/ticket-actions'
 import { imprimirTicket } from '@/lib/print/ticket'
 import { imprimirVentaTermica, SinImpresoraError } from '@/lib/print/termica'
@@ -16,6 +19,9 @@ interface VentaRow {
   id: string; numero: string; cliente: string; clienteEmail: string; items: number; total: number
   formaPago: string; saldoPendiente: number; requiereFactura: boolean; facturaEstado: string | null
   notaCreditoEstado: string | null; estado: string; fecha: string
+  totalDevuelto: number
+  devoluciones: { numero: string; total: number }[]
+  ncParciales: { id: string; estado: string; numero: string; valor: number }[]
 }
 
 export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: VentaRow[]; hayEmisor: boolean; puedeAnular: boolean }) {
@@ -28,6 +34,19 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
   const [enviarModal, setEnviarModal] = useState<VentaRow | null>(null)
   const [enviarTipo, setEnviarTipo] = useState<'factura' | 'nc'>('factura')
   const [emailDestino, setEmailDestino] = useState('')
+  const [devolucion, setDevolucion] = useState<string | null>(null)
+  const router = useRouter()
+
+  const consultarNC = async (ncId: string) => {
+    setAccion(ncId + '-consulta')
+    const t = toast.loading('Consultando la nota de crédito en el SRI...')
+    try {
+      const r = await consultarDevolucionPendienteAction(ncId)
+      if ('error' in r) toast.error(r.error, { id: t, duration: 8000 })
+      else toast.success(`Nota de crédito autorizada: devolución ${r.numero} aplicada (${money(r.total)})`, { id: t })
+      router.refresh()
+    } finally { setAccion(null) }
+  }
   const money = (n: number) => `$${n.toFixed(2)}`
   const fecha = (iso: string) => new Date(iso).toLocaleString('es-EC', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -100,10 +119,10 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
     } finally { setAccion(null) }
   }
 
-  const descargarNCPDF = async (id: string) => {
-    setAccion(id + '-ncpdf')
+  const descargarNCPDF = async (id: string, ncId?: string) => {
+    setAccion((ncId ?? id) + '-ncpdf')
     try {
-      const res = await descargarRideNCAction(id)
+      const res = await descargarRideNCAction(id, ncId)
       if (res.success && res.pdfBase64) {
         const bin = atob(res.pdfBase64)
         const bytes = new Uint8Array(bin.length)
@@ -199,7 +218,8 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                 {ventas.map((v) => {
                   const anulada = v.estado === 'ANULADA'
                   const puedeEmitir = !anulada && v.requiereFactura && v.facturaEstado !== 'AUTORIZADA' && hayEmisor
-                  const puedeAnularEsta = puedeAnular && !anulada && v.facturaEstado !== 'AUTORIZADA'
+                  const puedeAnularEsta = puedeAnular && !anulada && v.facturaEstado !== 'AUTORIZADA' && v.totalDevuelto === 0
+                  const puedeDevolver = puedeAnular && !anulada && (!v.requiereFactura || v.facturaEstado === 'AUTORIZADA')
                   return (
                     <tr key={v.id} className={`border-b border-gray-50 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 ${anulada ? 'opacity-50' : ''}`}>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-900 dark:text-white">{v.numero}</td>
@@ -212,8 +232,28 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                             Fiado · {v.saldoPendiente > 0 ? `debe ${money(v.saldoPendiente)}` : 'pagado'}
                           </p>
                         )}
+                        {v.totalDevuelto > 0 && (
+                          <p className="text-[10px] font-semibold text-red-500" title={v.devoluciones.map((d) => `${d.numero}: ${money(d.total)}`).join(' · ')}>
+                            Devuelto {money(v.totalDevuelto)}
+                          </p>
+                        )}
                       </td>
-                      <td className="px-4 py-3">{badge(v)}</td>
+                      <td className="px-4 py-3">
+                        {badge(v)}
+                        {v.ncParciales.map((n) => (
+                          <div key={n.id} className="mt-1 flex items-center gap-1 text-[11px]">
+                            {n.estado === 'AUTORIZADA' ? (
+                              <button onClick={() => descargarNCPDF(v.id, n.id)} disabled={accion === n.id + '-ncpdf'} className="inline-flex items-center gap-1 text-red-500 hover:text-red-700" title="Descargar nota de crédito parcial (PDF)">
+                                {accion === n.id + '-ncpdf' ? <Loader2 size={11} className="animate-spin" /> : <FileMinus size={11} />} NC {n.numero} · {money(n.valor)}
+                              </button>
+                            ) : (
+                              <button onClick={() => consultarNC(n.id)} disabled={accion === n.id + '-consulta'} className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-700 font-semibold" title="La nota de crédito quedó pendiente en el SRI">
+                                {accion === n.id + '-consulta' ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} NC pendiente · Consultar SRI
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {!anulada && (
@@ -240,7 +280,7 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                               <button onClick={() => abrirEnviar(v, 'factura')} disabled={accion === v.id + '-mail'} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition" title="Enviar / reenviar factura por correo">
                                 {accion === v.id + '-mail' ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
                               </button>
-                              {puedeAnular && v.notaCreditoEstado !== 'AUTORIZADA' && (
+                              {puedeAnular && v.notaCreditoEstado !== 'AUTORIZADA' && v.totalDevuelto === 0 && (
                                 <button onClick={() => { setNotaCredito(v); setMotivoNC('') }} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500 transition" title="Emitir nota de crédito (anular factura)">
                                   <FileMinus size={15} />
                                 </button>
@@ -256,6 +296,11 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
                                 {accion === v.id + '-mail' ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
                               </button>
                             </>
+                          )}
+                          {puedeDevolver && (
+                            <button onClick={() => setDevolucion(v.id)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-brand-600 transition" title="Devolver productos (devolución parcial)">
+                              <Undo2 size={15} />
+                            </button>
                           )}
                           {puedeAnularEsta && (
                             <button onClick={() => setConfirmarAnular(v)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500 transition" title="Anular venta">
@@ -383,6 +428,7 @@ export function VentasClient({ ventas, hayEmisor, puedeAnular }: { ventas: Venta
           </div>
         </div>
       )}
+      {devolucion && <DevolucionModal ventaId={devolucion} onClose={() => setDevolucion(null)} />}
     </div>
   )
 }

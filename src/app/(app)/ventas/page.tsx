@@ -13,7 +13,8 @@ export default async function VentasPage() {
     include: {
       cliente: { select: { nombre: true, identificacion: true, email: true } },
       factura: { select: { estado: true, numeroAutorizacion: true } },
-      notaCredito: { select: { estado: true } },
+      notasCredito: { select: { id: true, tipo: true, estado: true, claveAcceso: true, valorModificacion: true, devolucionId: true }, orderBy: { createdAt: 'asc' } },
+      devoluciones: { select: { numero: true, total: true }, orderBy: { createdAt: 'asc' } },
       _count: { select: { items: true } },
     },
     orderBy: { fecha: 'desc' },
@@ -31,7 +32,13 @@ export default async function VentasPage() {
     saldoPendiente: Number(v.saldoPendiente),
     requiereFactura: v.requiereFactura,
     facturaEstado: v.factura?.estado ?? null,
-    notaCreditoEstado: v.notaCredito?.estado ?? null,
+    notaCreditoEstado: v.notasCredito.find((n) => n.tipo === 'TOTAL')?.estado ?? null,
+    totalDevuelto: Number(v.totalDevuelto),
+    devoluciones: v.devoluciones.map((d) => ({ numero: d.numero, total: Number(d.total) })),
+    // NC parciales: autorizadas (para el RIDE) y pendientes (para consultar al SRI)
+    ncParciales: v.notasCredito.filter((n) => n.tipo === 'PARCIAL' && n.estado !== 'RECHAZADA').map((n) => ({
+      id: n.id, estado: n.estado, numero: `${n.claveAcceso.substring(24, 27)}-${n.claveAcceso.substring(27, 30)}-${n.claveAcceso.substring(30, 39)}`, valor: Number(n.valorModificacion),
+    })),
     estado: v.estado,
     fecha: v.fecha.toISOString(),
   }))

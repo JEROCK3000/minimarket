@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db/prisma'
 
 /** Calcula el resumen de caja de un período, sumando el fondo inicial al efectivo esperado. */
 export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: Date, fondoInicial = 0) {
-  const [ventas, gastos, abonos, pagosProv, movimientos] = await Promise.all([
+  const [ventas, gastos, abonos, pagosProv, movimientos, devoluciones] = await Promise.all([
     prisma.venta.findMany({
       where: { tenantId, estado: 'COMPLETADA', fecha: { gte: desde, lte: hasta } },
       select: { formaPago: true, total: true },
@@ -34,6 +34,12 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
       orderBy: { createdAt: 'asc' },
       select: { id: true, tipo: true, monto: true, motivo: true, usuarioNombre: true, createdAt: true },
     }),
+    // Devoluciones a clientes en el período (el efectivo sale de la caja).
+    prisma.devolucion.groupBy({
+      by: ['formaReembolso'],
+      where: { tenantId, createdAt: { gte: desde, lte: hasta } },
+      _sum: { total: true },
+    }),
   ])
 
   let efectivo = 0, tarjeta = 0, transfer = 0, credito = 0
@@ -52,6 +58,8 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
   const sumaMov = (t: string) => movimientos.filter((m) => m.tipo === t).reduce((s, m) => s + Number(m.monto), 0)
   const ingresosEfectivo = sumaMov('INGRESO')
   const retirosEfectivo = sumaMov('RETIRO')
+  const devolucionesEfectivo = Number(devoluciones.find((d) => d.formaReembolso === 'EFECTIVO')?._sum.total ?? 0)
+  const devolucionesTotal = devoluciones.reduce((s, d) => s + Number(d._sum.total ?? 0), 0)
 
   return {
     totalVentas: ventas.length,
@@ -67,8 +75,10 @@ export async function obtenerResumenCaja(tenantId: string, desde: Date, hasta: D
     fondoInicial,
     ingresosEfectivo,
     retirosEfectivo,
+    devolucionesEfectivo,
+    devolucionesTotal,
     movimientos: movimientos.map((m) => ({ id: m.id, tipo: m.tipo, monto: Number(m.monto), motivo: m.motivo, usuario: m.usuarioNombre, fecha: m.createdAt.toISOString() })),
-    efectivoEsperado: fondoInicial + efectivo + abonosEfectivo + ingresosEfectivo - gastosEfectivo - pagosProveedorEfectivo - retirosEfectivo,
+    efectivoEsperado: fondoInicial + efectivo + abonosEfectivo + ingresosEfectivo - gastosEfectivo - pagosProveedorEfectivo - retirosEfectivo - devolucionesEfectivo,
   }
 }
 

@@ -26,36 +26,44 @@ export async function GET(request: NextRequest) {
     })
 
     const tenant = await prisma.tenant.findUnique({ where: { id: sesion.tenantId }, select: { nombre: true } })
+    // Anuladas se listan pero no suman; las devoluciones parciales se restan (neto).
+    const anulada = (v: (typeof ventas)[number]) => v.estado === 'ANULADA'
+    const comprobante = (v: (typeof ventas)[number]) => anulada(v) ? 'ANULADA' : !v.requiereFactura ? 'Ticket' : v.factura?.estado ?? 'Sin emitir'
+    const devuelto = (v: (typeof ventas)[number]) => anulada(v) ? 0 : Number(v.totalDevuelto)
+    const neto = (v: (typeof ventas)[number]) => anulada(v) ? 0 : Number(v.total) - Number(v.totalDevuelto)
 
     if (searchParams.get('formato') === 'pdf') {
-      let totalGeneral = 0
+      let totalGeneral = 0, totalDevuelto = 0
       const filas = ventas.map((v) => {
-        totalGeneral += Number(v.total)
+        totalGeneral += neto(v); totalDevuelto += devuelto(v)
         return [
           v.numero,
           v.fecha.toLocaleDateString('es-EC'),
           v.cliente?.nombre ?? 'Consumidor final',
           v.cliente?.identificacion ?? '—',
           v.formaPago,
-          !v.requiereFactura ? 'Ticket' : v.factura?.estado ?? 'Sin emitir',
+          comprobante(v),
           usd(Number(v.subtotal)),
           usd(Number(v.iva)),
           usd(Number(v.total)),
+          devuelto(v) > 0 ? usd(devuelto(v)) : '—',
+          usd(neto(v)),
         ]
       })
       const pdf = generarReportePdf({
         empresa: tenant?.nombre || 'MiniMarket',
         titulo: 'Reporte de Ventas',
-        subtitulo: `Del ${desde.toLocaleDateString('es-EC')} al ${hasta.toLocaleDateString('es-EC')} | ${ventas.length} venta(s)`,
+        subtitulo: `Del ${desde.toLocaleDateString('es-EC')} al ${hasta.toLocaleDateString('es-EC')} | ${ventas.length} venta(s) | anuladas no suman; neto = total − devoluciones`,
         orientacion: 'landscape',
         columnas: [
           { header: 'Nº' }, { header: 'Fecha', align: 'center' }, { header: 'Cliente' },
           { header: 'Identificación', align: 'center' }, { header: 'Forma pago', align: 'center' },
           { header: 'Comprobante', align: 'center' }, { header: 'Subtotal', align: 'right' },
           { header: 'IVA', align: 'right' }, { header: 'Total', align: 'right' },
+          { header: 'Devuelto', align: 'right' }, { header: 'Neto', align: 'right' },
         ],
         filas,
-        totales: ['', '', '', '', '', 'TOTAL', '', '', usd(totalGeneral)],
+        totales: ['', '', '', '', '', 'TOTAL', '', '', '', usd(totalDevuelto), usd(totalGeneral)],
       })
       await registrarLog('AUDIT', 'REPORTES', `Reporte de ventas PDF generado por ${sesion.email}`, undefined, sesion.tenantId)
       return new NextResponse(pdf, {
@@ -72,31 +80,31 @@ export async function GET(request: NextRequest) {
     const sheet = wb.addWorksheet('Ventas', { pageSetup: { paperSize: 9, orientation: 'landscape' } })
 
     // Título
-    sheet.mergeCells('A1:H1')
+    sheet.mergeCells('A1:K1')
     const title = sheet.getCell('A1')
     title.value = `${tenant?.nombre || 'MiniMarket'} — Reporte de Ventas`
     title.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FF2563EB' } }
     title.alignment = { horizontal: 'center' }
 
-    sheet.mergeCells('A2:H2')
+    sheet.mergeCells('A2:K2')
     const sub = sheet.getCell('A2')
-    sub.value = `Del ${desde.toLocaleDateString('es-EC')} al ${hasta.toLocaleDateString('es-EC')} | ${ventas.length} venta(s)`
+    sub.value = `Del ${desde.toLocaleDateString('es-EC')} al ${hasta.toLocaleDateString('es-EC')} | ${ventas.length} venta(s) | anuladas no suman; neto = total − devoluciones`
     sub.font = { size: 10, color: { argb: 'FF6B7280' } }
     sub.alignment = { horizontal: 'center' }
     sheet.addRow([])
 
     // Encabezados
-    const header = sheet.addRow(['Nº', 'Fecha', 'Cliente', 'Identificación', 'Forma pago', 'Comprobante', 'Subtotal', 'IVA', 'Total'])
+    const header = sheet.addRow(['Nº', 'Fecha', 'Cliente', 'Identificación', 'Forma pago', 'Comprobante', 'Subtotal', 'IVA', 'Total', 'Devuelto', 'Neto'])
     header.eachCell((cell) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } }
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 }
       cell.alignment = { horizontal: 'center', vertical: 'middle' }
     })
 
-    let totalGeneral = 0
+    let totalGeneral = 0, totalDevuelto = 0
     for (const v of ventas) {
-      totalGeneral += Number(v.total)
-      const comp = !v.requiereFactura ? 'Ticket' : v.factura?.estado ?? 'Sin emitir'
+      totalGeneral += neto(v); totalDevuelto += devuelto(v)
+      const comp = comprobante(v)
       const row = sheet.addRow([
         v.numero,
         v.fecha.toLocaleDateString('es-EC'),
@@ -107,16 +115,17 @@ export async function GET(request: NextRequest) {
         Number(v.subtotal),
         Number(v.iva),
         Number(v.total),
+        devuelto(v),
+        neto(v),
       ])
-      ;[7, 8, 9].forEach((c) => { row.getCell(c).numFmt = '"$"#,##0.00' })
+      ;[7, 8, 9, 10, 11].forEach((c) => { row.getCell(c).numFmt = '"$"#,##0.00' })
     }
 
-    const totalRow = sheet.addRow(['', '', '', '', '', 'TOTAL', '', '', totalGeneral])
+    const totalRow = sheet.addRow(['', '', '', '', '', 'TOTAL NETO', '', '', '', totalDevuelto, totalGeneral])
     totalRow.getCell(6).font = { bold: true }
-    totalRow.getCell(9).font = { bold: true }
-    totalRow.getCell(9).numFmt = '"$"#,##0.00'
+    ;[10, 11].forEach((c) => { totalRow.getCell(c).font = { bold: true }; totalRow.getCell(c).numFmt = '"$"#,##0.00' })
 
-    sheet.columns.forEach((col, i) => { col.width = [12, 12, 28, 16, 12, 14, 12, 10, 12][i] || 12 })
+    sheet.columns.forEach((col, i) => { col.width = [12, 12, 28, 16, 12, 14, 12, 10, 12, 11, 12][i] || 12 })
 
     await registrarLog('AUDIT', 'REPORTES', `Reporte de ventas Excel generado por ${sesion.email}`, undefined, sesion.tenantId)
 

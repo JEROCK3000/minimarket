@@ -26,6 +26,9 @@ export async function anularVentaAction(ventaId: string) {
     if (venta._count.abonos > 0) {
       return { error: 'No se puede anular: esta venta a crédito ya tiene abonos registrados.' }
     }
+    if (Number(venta.totalDevuelto) > 0) {
+      return { error: 'No se puede anular: esta venta ya tiene devoluciones. Usa "Devolver productos" para devolver lo que queda.' }
+    }
     if (venta.factura?.estado === 'AUTORIZADA') {
       return { error: 'No se puede anular: la factura ya fue autorizada por el SRI. Requiere una Nota de Crédito.' }
     }
