@@ -238,6 +238,11 @@ export async function crearCompraAction(data: CompraFormValues) {
     revalidatePath('/productos')
     return { success: true, numero }
   } catch (error: any) {
+    // Índice único (tenantId, claveAcceso): otra persona registró la misma factura al mismo tiempo.
+    if (error?.code === 'P2002' && String(error?.meta?.target ?? '').includes('clave')) {
+      await registrarLog('WARN', 'COMPRAS', `Factura de proveedor duplicada bloqueada por la BD (clave ${d.claveAcceso})`, undefined, sesion.tenantId)
+      return { error: 'Esta factura del proveedor ya fue registrada. No se sumó nada al inventario.' }
+    }
     await registrarLog('ERROR', 'COMPRAS', `Error registrando compra: ${error.message || error}`, undefined, sesion.tenantId)
     return { error: 'No se pudo registrar la compra' }
   }
@@ -321,7 +326,8 @@ export async function anularCompraAction(id: string, motivo: string) {
       // Marcar primero, condicionado: dos anulaciones simultáneas no restan dos veces.
       const marcada = await tx.compra.updateMany({
         where: { id, tenantId: sesion.tenantId, estado: 'ACTIVA' },
-        data: { estado: 'ANULADA', anuladaAt: new Date(), motivoAnulacion: parsed.data.motivo, saldoPendiente: 0 },
+        // claveAcceso: null libera la factura del proveedor para volver a cargarla corregida (queda en el log).
+        data: { estado: 'ANULADA', anuladaAt: new Date(), motivoAnulacion: parsed.data.motivo, saldoPendiente: 0, claveAcceso: null },
       })
       if (marcada.count === 0) throw new ErrorNegocio('La compra ya está anulada')
 
@@ -344,7 +350,7 @@ export async function anularCompraAction(id: string, motivo: string) {
     return { error: 'No se pudo anular la compra' }
   }
 
-  await registrarLog('AUDIT', 'COMPRAS', `Compra ANULADA: ${compra.numero} — ${parsed.data.motivo}`, undefined, sesion.tenantId)
+  await registrarLog('AUDIT', 'COMPRAS', `Compra ANULADA: ${compra.numero} — ${parsed.data.motivo}${compra.claveAcceso ? ` (factura proveedor clave ${compra.claveAcceso} liberada)` : ''}`, undefined, sesion.tenantId)
   revalidatePath('/compras')
   revalidatePath('/productos')
   return { success: true }

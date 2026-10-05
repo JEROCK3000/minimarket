@@ -343,8 +343,8 @@ model Compra {
   items CompraItem[]
   pagos PagoCompra[]
 
+  @@unique([tenantId, claveAcceso])
   @@index([tenantId])
-  @@index([tenantId, claveAcceso])
   @@map("compras")
 }
 
