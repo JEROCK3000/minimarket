@@ -28,6 +28,7 @@ export default async function ProductosPage() {
     id: p.id,
     nombre: p.nombre,
     codigoBarras: p.codigoBarras,
+    codigoBalanza: p.codigoBalanza,
     categoriaId: p.categoriaId,
     categoriaNombre: p.categoria?.nombre ?? null,
     categoriaIcono: p.categoria?.icono ?? null,

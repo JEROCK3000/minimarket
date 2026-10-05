@@ -28,6 +28,7 @@ export function ProductoForm({
     stock: producto?.stock?.toString() ?? '0',
     stockMinimo: producto?.stockMinimo?.toString() ?? '5',
     unidad: producto?.unidad ?? 'unidad',
+    codigoBalanza: producto?.codigoBalanza ?? '',
   })
   const [loading, setLoading] = useState(false)
   // Imagen: archivo nuevo (se sube al guardar) o quitar la actual.
@@ -177,15 +178,21 @@ export function ProductoForm({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Unidad de medida</label>
-            <select value={form.unidad} onChange={(e) => set('unidad', e.target.value)} className="input">
-              <option value="unidad">Unidad</option>
-              <option value="kg">Kilogramo (kg)</option>
-              <option value="lb">Libra (lb)</option>
-              <option value="litro">Litro</option>
-              <option value="paquete">Paquete</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Unidad de medida</label>
+              <select value={form.unidad} onChange={(e) => set('unidad', e.target.value)} className="input">
+                <option value="unidad">Unidad</option>
+                <option value="kg">Kilogramo (kg)</option>
+                <option value="lb">Libra (lb)</option>
+                <option value="litro">Litro</option>
+                <option value="paquete">Paquete</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="pf-plu" className="text-xs font-semibold text-gray-500 dark:text-gray-400">Código de balanza (PLU)</label>
+              <input id="pf-plu" value={form.codigoBalanza} onChange={(e) => set('codigoBalanza', e.target.value.replace(/\D/g, ''))} className="input font-mono" inputMode="numeric" maxLength={6} placeholder="Solo si se pesa" />
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

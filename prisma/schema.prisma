@@ -235,10 +235,11 @@ model Producto {
   categoriaId String?
   categoria   Categoria? @relation(fields: [categoriaId], references: [id])
 
-  codigoBarras String? @db.VarChar(50) // para el lector del POS
-  nombre       String  @db.VarChar(150)
-  descripcion  String? @db.Text
-  imagen       String? @db.VarChar(120) // archivo WebP en storage/productos/<tenantId>/ (ver lib/productos/imagenes.ts)
+  codigoBarras  String? @db.VarChar(50) // para el lector del POS
+  codigoBalanza String? @db.VarChar(6) // PLU programado en la balanza (etiquetas 2x con peso/precio)
+  nombre        String  @db.VarChar(150)
+  descripcion   String? @db.Text
+  imagen        String? @db.VarChar(120) // archivo WebP en storage/productos/<tenantId>/ (ver lib/productos/imagenes.ts)
 
   // Precios
   precioCompra  Decimal @default(0) @db.Decimal(10, 4)
@@ -262,6 +263,7 @@ model Producto {
   movimientos      MovimientoInventario[]
 
   @@unique([tenantId, codigoBarras])
+  @@unique([tenantId, codigoBalanza])
   @@index([tenantId])
   @@index([categoriaId])
   @@map("productos")

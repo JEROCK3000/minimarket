@@ -11,6 +11,7 @@ import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 const productoSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es requerido').max(150),
   codigoBarras: z.string().trim().max(50).optional().or(z.literal('')),
+  codigoBalanza: z.string().trim().regex(/^\d{1,6}$/, 'El código de balanza son de 1 a 6 dígitos').optional().or(z.literal('')),
   categoriaId: z.string().trim().optional().or(z.literal('')),
   precioCompra: z.coerce.number().min(0, 'No puede ser negativo').max(999999),
   precioVenta: z.coerce.number().min(0, 'No puede ser negativo').max(999999),
@@ -25,6 +26,7 @@ const productoSchema = z.object({
 export interface ProductoFormValues {
   nombre: string
   codigoBarras?: string
+  codigoBalanza?: string
   categoriaId?: string
   precioCompra: string
   precioVenta: string
@@ -53,6 +55,7 @@ export async function crearProductoAction(data: ProductoFormValues) {
         tenantId: sesion.tenantId,
         nombre: d.nombre,
         codigoBarras: d.codigoBarras || null,
+        codigoBalanza: d.codigoBalanza ? d.codigoBalanza.replace(/^0+(?=\d)/, '') : null, // sin ceros a la izquierda: '00123' = '123'
         categoriaId: d.categoriaId || null,
         precioCompra: d.precioCompra,
         precioVenta: d.precioVenta,
@@ -82,7 +85,7 @@ export async function crearProductoAction(data: ProductoFormValues) {
     revalidatePath('/productos')
     return { success: true, id: producto.id }
   } catch (error: any) {
-    if (error.code === 'P2002') return { error: 'Ya existe un producto con ese código de barras' }
+    if (error.code === 'P2002') return { error: String(error.meta?.target ?? '').includes('Balanza') ? 'Ya existe un producto con ese código de balanza' : 'Ya existe un producto con ese código de barras' }
     await registrarLog('ERROR', 'PRODUCTOS', `Error creando producto: ${error.message || error}`, undefined, sesion.tenantId)
     return { error: 'No se pudo crear el producto' }
   }
@@ -135,6 +138,7 @@ export async function actualizarProductoAction(id: string, data: ProductoFormVal
       data: {
         nombre: d.nombre,
         codigoBarras: d.codigoBarras || null,
+        codigoBalanza: d.codigoBalanza ? d.codigoBalanza.replace(/^0+(?=\d)/, '') : null, // sin ceros a la izquierda: '00123' = '123'
         categoriaId: d.categoriaId || null,
         precioCompra: d.precioCompra,
         precioVenta: d.precioVenta,
@@ -149,7 +153,7 @@ export async function actualizarProductoAction(id: string, data: ProductoFormVal
     revalidatePath('/productos')
     return { success: true }
   } catch (error: any) {
-    if (error.code === 'P2002') return { error: 'Ya existe un producto con ese código de barras' }
+    if (error.code === 'P2002') return { error: String(error.meta?.target ?? '').includes('Balanza') ? 'Ya existe un producto con ese código de balanza' : 'Ya existe un producto con ese código de barras' }
     await registrarLog('ERROR', 'PRODUCTOS', `Error actualizando producto: ${error.message || error}`, undefined, sesion.tenantId)
     return { error: 'No se pudo actualizar el producto' }
   }

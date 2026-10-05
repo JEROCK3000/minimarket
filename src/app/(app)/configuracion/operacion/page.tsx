@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { requerirTenant } from '@/lib/auth/tenant'
-import { usaControlCaja } from '@/lib/config/negocio'
+import { usaControlCaja, leerConfigBalanza } from '@/lib/config/negocio'
+import { BalanzaForm } from './BalanzaForm'
 import { cajaAbierta } from '@/lib/caja/estado'
 import { ConfigTabs } from '../ConfigTabs'
 import { OperacionForm } from './OperacionForm'
@@ -9,7 +10,7 @@ export const metadata: Metadata = { title: 'Operación' }
 
 export default async function OperacionPage() {
   const sesion = await requerirTenant('ADMIN')
-  const [usarCaja, apertura] = await Promise.all([usaControlCaja(sesion.tenantId), cajaAbierta(sesion.tenantId)])
+  const [usarCaja, apertura, balanza] = await Promise.all([usaControlCaja(sesion.tenantId), cajaAbierta(sesion.tenantId), leerConfigBalanza(sesion.tenantId)])
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
@@ -18,6 +19,7 @@ export default async function OperacionPage() {
       </div>
       <ConfigTabs />
       <OperacionForm usarCaja={usarCaja} hayCajaAbierta={!!apertura} />
+      <BalanzaForm config={balanza} />
     </div>
   )
 }

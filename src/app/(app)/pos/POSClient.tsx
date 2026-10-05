@@ -14,16 +14,17 @@ import { imprimirVentaTermica, SinImpresoraError } from '@/lib/print/termica'
 import { emitirFacturaVentaAction } from '../ventas/sri-actions'
 import { calcularVenta } from '@/lib/ventas/totales'
 import { urlImagenProducto } from '@/lib/productos/url'
+import { leerEtiquetaBalanza, mismoPlu, type ConfigBalanza } from '@/lib/pos/balanza'
 
 interface Prod {
-  id: string; nombre: string; codigoBarras: string | null; categoriaNombre: string | null
+  id: string; nombre: string; codigoBarras: string | null; codigoBalanza?: string | null; categoriaNombre: string | null
   precioVenta: number; ivaPorcentaje: number; stock: number; unidad: string; imagen?: string | null
 }
 interface Cat { id: string; nombre: string; icono: string | null }
 interface ItemCarrito extends Prod { cantidad: number }
 interface ClienteSel { id: string; nombre: string; identificacion: string; telefono?: string | null; email?: string | null; direccion?: string | null }
 
-export function POSClient({ productos, categorias, cajaAbierta }: { productos: Prod[]; categorias: Cat[]; cajaAbierta: boolean }) {
+export function POSClient({ productos, categorias, cajaAbierta, balanza }: { productos: Prod[]; categorias: Cat[]; cajaAbierta: boolean; balanza: ConfigBalanza }) {
   // Sin caja abierta no se vende: se pide abrirla con su fondo inicial.
   const [cajaCerrada, setCajaCerrada] = useState(!cajaAbierta)
   const [busqueda, setBusqueda] = useState('')
@@ -62,14 +63,24 @@ export function POSClient({ productos, categorias, cajaAbierta }: { productos: P
 
   const vuelto = pagoCon ? Math.max(0, Number(pagoCon) - total) : 0
 
-  const agregar = (p: Prod) => {
+  const r3 = (n: number) => Math.round(n * 1000) / 1000
+  const agregar = (p: Prod, cantidad = 1) => {
     setCarrito((c) => {
       const existe = c.find((it) => it.id === p.id)
       const enCarrito = existe?.cantidad ?? 0
-      if (enCarrito + 1 > p.stock) { toast.error(`Sin stock de ${p.nombre}`); return c }
-      if (existe) return c.map((it) => (it.id === p.id ? { ...it, cantidad: it.cantidad + 1 } : it))
-      return [...c, { ...p, cantidad: 1 }]
+      if (enCarrito + cantidad > p.stock + 1e-9) { toast.error(`Sin stock suficiente de ${p.nombre} (hay ${p.stock})`); return c }
+      if (existe) return c.map((it) => (it.id === p.id ? { ...it, cantidad: r3(it.cantidad + cantidad) } : it))
+      return [...c, { ...p, cantidad: r3(cantidad) }]
     })
+  }
+  /** Cantidad escrita a mano (productos al peso, cantidades grandes). */
+  const fijarCantidad = (id: string, valor: number) => {
+    setCarrito((c) => c.flatMap((it) => {
+      if (it.id !== id) return [it]
+      if (!(valor > 0)) return [it]
+      if (valor > it.stock + 1e-9) { toast.error(`Solo hay ${it.stock} de ${it.nombre}`); return [it] }
+      return [{ ...it, cantidad: r3(valor) }]
+    }))
   }
   const cambiarCantidad = (id: string, delta: number) => {
     setCarrito((c) => c.flatMap((it) => {
@@ -87,8 +98,19 @@ export function POSClient({ productos, categorias, cajaAbierta }: { productos: P
     if (e.key !== 'Enter') return
     const code = busqueda.trim()
     const exacto = productos.find((p) => p.codigoBarras === code)
-    if (exacto) { agregar(exacto); setBusqueda(''); }
-    else if (filtrados.length === 1) { agregar(filtrados[0]); setBusqueda('') }
+    if (exacto) { agregar(exacto); setBusqueda(''); return }
+    // Etiqueta de balanza: 2x + PLU + peso/precio (Configuración → Operación)
+    const etiqueta = leerEtiquetaBalanza(code, balanza)
+    if (etiqueta) {
+      const prod = productos.find((p) => mismoPlu(p.codigoBalanza, etiqueta.plu))
+      if (!prod) { toast.error(`Ningún producto tiene el código de balanza ${etiqueta.plu.replace(/^0+(?=\d)/, '')}`); setBusqueda(''); return }
+      const pvp = prod.precioVenta * (1 + prod.ivaPorcentaje / 100)
+      const cantidad = etiqueta.peso ?? (pvp > 0 ? r3((etiqueta.precio ?? 0) / pvp) : 0)
+      if (!(cantidad > 0)) { toast.error('La etiqueta no tiene peso/precio válido'); setBusqueda(''); return }
+      agregar(prod, cantidad); setBusqueda('')
+      return
+    }
+    if (filtrados.length === 1) { agregar(filtrados[0]); setBusqueda('') }
   }
 
   const limpiar = () => {
@@ -204,7 +226,7 @@ export function POSClient({ productos, categorias, cajaAbierta }: { productos: P
               </div>
               <div className="flex items-center gap-1">
                 <button onClick={() => cambiarCantidad(it.id, -1)} className="p-1 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"><Minus size={13} /></button>
-                <span className="w-7 text-center font-semibold">{it.cantidad}</span>
+                <CantidadEditable valor={it.cantidad} onCambiar={(v) => fijarCantidad(it.id, v)} etiqueta={`Cantidad de ${it.nombre}`} />
                 <button onClick={() => cambiarCantidad(it.id, 1)} className="p-1 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"><Plus size={13} /></button>
               </div>
               <span className="w-16 text-right font-semibold text-gray-900 dark:text-white">{money(it.cantidad * it.precioVenta)}</span>
@@ -548,5 +570,20 @@ function AbrirCajaModal({ onAbierta }: { onAbierta: () => void }) {
         <Link href="/dashboard" className="block text-center text-xs text-gray-400 hover:text-gray-600">Volver al inicio</Link>
       </form>
     </div>
+  )
+}
+
+/** Cantidad del carrito: se puede escribir (ej. 0.750 kg); se aplica al salir del campo o con Enter. */
+function CantidadEditable({ valor, onCambiar, etiqueta }: { valor: number; onCambiar: (v: number) => void; etiqueta: string }) {
+  const [txt, setTxt] = useState(String(valor))
+  const [editando, setEditando] = useState(false)
+  const mostrado = editando ? txt : String(valor)
+  const aplicar = () => { setEditando(false); const v = Number(txt.replace(',', '.')); if (v > 0 && v !== valor) onCambiar(v) }
+  return (
+    <input value={mostrado} inputMode="decimal" aria-label={etiqueta}
+      onFocus={(e) => { setTxt(String(valor)); setEditando(true); e.target.select() }}
+      onChange={(e) => setTxt(e.target.value)} onBlur={aplicar}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      className="w-12 text-center font-semibold bg-transparent rounded border border-transparent hover:border-gray-200 dark:hover:border-white/10 focus:border-brand-500 focus:outline-none py-0.5" />
   )
 }

@@ -15,6 +15,7 @@ export interface ProductoRow {
   id: string
   nombre: string
   codigoBarras: string | null
+  codigoBalanza: string | null
   categoriaId: string | null
   categoriaNombre: string | null
   categoriaIcono: string | null
