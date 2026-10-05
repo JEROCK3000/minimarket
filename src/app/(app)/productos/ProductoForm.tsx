@@ -5,6 +5,7 @@ import { X, Loader2, Save, ImagePlus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { crearProductoAction, actualizarProductoAction, subirImagenProductoAction, quitarImagenProductoAction } from './actions'
 import { urlImagenProducto } from '@/lib/productos/url'
+import { comprimirImagen } from '@/lib/utils/comprimir-imagen'
 import type { ProductoRow, CategoriaRow } from './ProductosClient'
 
 export function ProductoForm({
@@ -35,11 +36,18 @@ export function ProductoForm({
   const [previa, setPrevia] = useState<string | null>(urlImagenProducto(producto?.id ?? '', producto?.imagen))
   useEffect(() => () => { if (previa?.startsWith('blob:')) URL.revokeObjectURL(previa) }, [previa])
 
-  const elegirImagen = (f: File | null) => {
-    if (!f) return
-    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) { toast.error('Usa una imagen JPG, PNG o WebP'); return }
-    if (f.size > 3 * 1024 * 1024) { toast.error('La imagen debe pesar menos de 3 MB'); return }
-    setArchivoImagen(f); setQuitarImagen(false); setPrevia(URL.createObjectURL(f))
+  const [comprimiendo, setComprimiendo] = useState(false)
+  const elegirImagen = async (original: File | null) => {
+    if (!original) return
+    if (!original.type.startsWith('image/')) { toast.error('El archivo no es una imagen'); return }
+    setComprimiendo(true)
+    try {
+      // Se comprime en el navegador: cualquier foto, pese lo que pese, entra en el límite del servidor.
+      const f = await comprimirImagen(original)
+      setArchivoImagen(f); setQuitarImagen(false); setPrevia(URL.createObjectURL(f))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo procesar la imagen')
+    } finally { setComprimiendo(false) }
   }
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
@@ -104,15 +112,15 @@ export function ProductoForm({
             </div>
             <div className="space-y-1.5">
               <label className="btn-ghost text-xs cursor-pointer inline-flex">
-                <ImagePlus size={14} /> {previa ? 'Cambiar imagen' : 'Agregar imagen'}
-                <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => elegirImagen(e.target.files?.[0] ?? null)} />
+                {comprimiendo ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />} {comprimiendo ? 'Optimizando…' : previa ? 'Cambiar imagen' : 'Agregar imagen'}
+                <input type="file" accept="image/*" className="sr-only" disabled={comprimiendo} onChange={(e) => { elegirImagen(e.target.files?.[0] ?? null); e.target.value = '' }} />
               </label>
               {previa && (
                 <button type="button" onClick={() => { setArchivoImagen(null); setQuitarImagen(true); setPrevia(null) }} className="btn-ghost text-xs text-red-600 dark:text-red-400 inline-flex ml-1">
                   <Trash2 size={14} /> Quitar
                 </button>
               )}
-              <p className="text-[11px] text-gray-400">JPG, PNG o WebP, máx. 3 MB. Se ajusta a 400×400.</p>
+              <p className="text-[11px] text-gray-400">Cualquier foto: se optimiza automáticamente y se ajusta a 400×400.</p>
             </div>
           </div>
 
@@ -182,7 +190,7 @@ export function ProductoForm({
 
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn-ghost">Cancelar</button>
-            <button type="submit" disabled={loading} className="btn-primary">
+            <button type="submit" disabled={loading || comprimiendo} className="btn-primary">
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               {esEdicion ? 'Guardar cambios' : 'Crear producto'}
             </button>
