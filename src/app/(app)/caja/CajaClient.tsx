@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Banknote, CreditCard, ArrowLeftRight, Wallet, Loader2, CheckCircle2, Calculator, DoorOpen, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
 import { toast } from 'sonner'
 import { registrarCierreAction, abrirCajaAction, registrarMovimientoCajaAction } from './actions'
@@ -13,15 +14,18 @@ interface Resumen {
   ingresosEfectivo: number; retirosEfectivo: number; devolucionesEfectivo: number; devolucionesTotal: number
   movimientos: { id: string; tipo: string; monto: number; motivo: string; usuario: string; fecha: string }[]
 }
-interface Apertura { id: string; usuario: string; fondoInicial: number; abiertaAt: string }
+interface Apertura { id: string; usuario: string; caja?: string | null; fondoInicial: number; abiertaAt: string }
+interface AbiertaRow { id: string; caja: string; usuario: string; propia: boolean; abiertaAt: string }
 interface Cierre {
   id: string; fecha: string; usuario: string; totalVendido: number
   efectivoEsperado: number; efectivoContado: number; diferencia: number
 }
 
-export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
+export function CajaClient({ resumen, desde, origenDesde, apertura, cierres, varias = false, esAdmin = false, cajasLibres = [], abiertas = [] }: {
   resumen: Resumen; desde: string; origenDesde: 'APERTURA' | 'ULTIMO_CIERRE' | 'HOY'; apertura: Apertura | null; cierres: Cierre[]
+  varias?: boolean; esAdmin?: boolean; cajasLibres?: { id: string; nombre: string }[]; abiertas?: AbiertaRow[]
 }) {
+  const [cajaId, setCajaId] = useState(cajasLibres[0]?.id ?? '')
   const router = useRouter()
   const [fondo, setFondo] = useState('')
   const [abriendo, setAbriendo] = useState(false)
@@ -51,7 +55,7 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
     if (contado === '') { toast.error('Ingresa el efectivo contado'); return }
     setLoading(true)
     try {
-      const res = await registrarCierreAction({ efectivoContado: Number(contado), notas })
+      const res = await registrarCierreAction({ efectivoContado: Number(contado), notas, aperturaId: apertura?.id })
       if (res.success) {
         const d = res.diferencia ?? 0
         toast.success(`Cierre registrado. ${Math.abs(d) < 0.01 ? 'Caja cuadrada ✓' : d > 0 ? `Sobrante ${money(d)}` : `Faltante ${money(Math.abs(d))}`}`)
@@ -64,7 +68,7 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
   const abrirCaja = async () => {
     setAbriendo(true)
     try {
-      const res = await abrirCajaAction({ fondoInicial: Number(fondo || 0) })
+      const res = await abrirCajaAction({ fondoInicial: Number(fondo || 0), cajaId: varias ? cajaId : undefined })
       if ('error' in res) { toast.error(res.error); return }
       toast.success('Caja abierta')
       setFondo('')
@@ -88,20 +92,43 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
         </p>
       </div>
 
+      {/* Varias cajas: el ADMIN ve todas las abiertas y elige cuál revisar/cerrar */}
+      {varias && esAdmin && abiertas.length > 0 && (
+        <div className="card space-y-2">
+          <h3 className="font-bold text-gray-900 dark:text-white text-sm">Cajas abiertas ({abiertas.length})</h3>
+          <div className="flex flex-wrap gap-2">
+            {abiertas.map((a) => (
+              <Link key={a.id} href={a.propia ? '/caja' : `/caja?apertura=${a.id}`}
+                className={`rounded-xl border px-3 py-2 text-sm transition ${apertura?.id === a.id ? 'border-brand-600 bg-brand-50 dark:bg-brand-500/10' : 'border-gray-200 dark:border-white/10 hover:border-brand-400'}`}>
+                <span className="font-semibold text-gray-900 dark:text-white">{a.caja}</span>
+                <span className="block text-xs text-gray-500">{a.propia ? 'Tú' : a.usuario} · desde {fecha(a.abiertaAt)}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Apertura de caja */}
       {apertura ? (
         <div className="card flex flex-wrap items-center gap-3 border-emerald-400/30 bg-emerald-50/40 dark:bg-emerald-500/5">
           <DoorOpen size={20} className="text-emerald-600" />
           <p className="text-sm text-gray-700 dark:text-gray-300">
-            Caja abierta por <strong>{apertura.usuario}</strong> el {fecha(apertura.abiertaAt)} con un fondo de <strong>{money(apertura.fondoInicial)}</strong>.
+            {apertura.caja ? <><strong>{apertura.caja}</strong> abierta</> : 'Caja abierta'} por <strong>{apertura.usuario}</strong> el {fecha(apertura.abiertaAt)} con un fondo de <strong>{money(apertura.fondoInicial)}</strong>.
           </p>
         </div>
+      ) : varias && cajasLibres.length === 0 ? (
+        <div className="card text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"><DoorOpen size={18} className="text-gray-400" /> Todas las cajas están abiertas por otros usuarios. Pide que cierren una o crea otra caja en Configuración → Operación.</div>
       ) : (
         <div className="card flex flex-col sm:flex-row sm:items-end gap-3">
           <div className="flex-1">
             <h3 className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2"><DoorOpen size={16} className="text-brand-600" /> Abrir caja</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Registra el efectivo con el que empiezas (fondo o sencillo) para que el arqueo cuadre. Es opcional.</p>
           </div>
+          {varias && (
+            <select value={cajaId} onChange={(e) => setCajaId(e.target.value)} className="input sm:w-40" aria-label="Caja a abrir">
+              {cajasLibres.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          )}
           <input type="number" step="0.01" min="0" value={fondo} onChange={(e) => setFondo(e.target.value)} className="input sm:w-40" placeholder="Fondo $0.00" aria-label="Fondo inicial" />
           <button onClick={abrirCaja} disabled={abriendo} className="btn-primary">
             {abriendo ? <Loader2 size={16} className="animate-spin" /> : <DoorOpen size={16} />} Abrir caja
@@ -211,7 +238,7 @@ export function CajaClient({ resumen, desde, origenDesde, apertura, cierres }: {
 
           <textarea value={notas} onChange={(e) => setNotas(e.target.value)} className="input min-h-[60px] py-2" placeholder="Notas del cierre (opcional)" />
 
-          <button onClick={cerrar} disabled={loading} className="btn-primary w-full">
+          <button onClick={cerrar} disabled={loading || (varias && !apertura)} className="btn-primary w-full" title={varias && !apertura ? "Abre tu caja para poder cerrarla" : undefined}>
             {loading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Registrar cierre de caja
           </button>
         </div>

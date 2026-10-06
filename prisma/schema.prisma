@@ -362,6 +362,7 @@ model Compra {
 model PagoCompra {
   id            String   @id @default(cuid())
   tenantId      String
+  aperturaId    String?  @db.VarChar(40) // caja (apertura) en la que se registró; ver lib/caja/estado.ts
   compraId      String
   compra        Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
   proveedorId   String?
@@ -374,6 +375,7 @@ model PagoCompra {
 
   @@index([tenantId, createdAt])
   @@index([compraId])
+  @@index([aperturaId])
   @@map("pagos_compra")
 }
 
@@ -422,6 +424,7 @@ model Cliente {
 model Venta {
   id                          String   @id @default(cuid())
   tenantId                    String
+  aperturaId                  String?  @db.VarChar(40) // caja (apertura) en la que se registró; ver lib/caja/estado.ts
   tenant                      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   clienteId                   String?
   cliente                     Cliente? @relation(fields: [clienteId], references: [id])
@@ -455,6 +458,7 @@ model Venta {
 
   @@index([tenantId])
   @@index([clienteId])
+  @@index([aperturaId])
   @@map("ventas")
 }
 
@@ -469,6 +473,7 @@ enum EstadoVenta {
 model AbonoVenta {
   id            String   @id @default(cuid())
   tenantId      String
+  aperturaId    String?  @db.VarChar(40) // caja (apertura) en la que se registró; ver lib/caja/estado.ts
   ventaId       String
   venta         Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
   clienteId     String
@@ -482,6 +487,7 @@ model AbonoVenta {
   @@index([tenantId, createdAt])
   @@index([ventaId])
   @@index([clienteId])
+  @@index([aperturaId])
   @@map("abonos_venta")
 }
 
@@ -513,9 +519,10 @@ model VentaItem {
 // ═══════════════════════════════════════════════════════════════════════════
 
 model Gasto {
-  id       String @id @default(cuid())
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id         String  @id @default(cuid())
+  tenantId   String
+  aperturaId String? @db.VarChar(40) // caja (apertura) en la que se registró; ver lib/caja/estado.ts
+  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   categoria   String   @db.VarChar(60) // Arriendo, Servicios, Sueldos, Transporte...
   descripcion String   @db.VarChar(300)
@@ -524,6 +531,7 @@ model Gasto {
   createdAt   DateTime @default(now())
 
   @@index([tenantId])
+  @@index([aperturaId])
   @@map("gastos")
 }
 
@@ -536,6 +544,8 @@ model CierreCaja {
   tenantId      String
   usuarioId     String?
   usuarioNombre String? @db.VarChar(120)
+  aperturaId    String? @db.VarChar(40)
+  cajaNombre    String? @db.VarChar(40)
 
   desde                  DateTime // inicio del período del corte
   fondoInicial           Decimal  @default(0) @db.Decimal(12, 2) // efectivo con el que se abrió la caja
@@ -569,6 +579,8 @@ model AperturaCaja {
   tenantId      String
   usuarioId     String?
   usuarioNombre String?   @db.VarChar(120)
+  cajaId        String?   @db.VarChar(40) // varias cajas: cuál se abrió (null = modo una sola caja)
+  cajaNombre    String?   @db.VarChar(40)
   fondoInicial  Decimal   @default(0) @db.Decimal(12, 2)
   notas         String?   @db.VarChar(300)
   abiertaAt     DateTime  @default(now())
@@ -739,6 +751,7 @@ model MovimientoCaja {
 model Devolucion {
   id             String   @id @default(cuid())
   tenantId       String
+  aperturaId     String?  @db.VarChar(40) // caja (apertura) en la que se registró; ver lib/caja/estado.ts
   ventaId        String
   venta          Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
   numero         String   @db.VarChar(20)
@@ -757,6 +770,7 @@ model Devolucion {
   @@unique([tenantId, numero])
   @@index([tenantId, createdAt])
   @@index([ventaId])
+  @@index([aperturaId])
   @@map("devoluciones")
 }
 
@@ -825,4 +839,16 @@ model ProductoPrecioEscala {
 
   @@unique([productoId, desde])
   @@map("producto_precios_escala")
+}
+
+/// Cajas del negocio (modo varias cajas). Sin cajas definidas = una sola caja (comportamiento original).
+model Caja {
+  id        String   @id @default(cuid())
+  tenantId  String
+  nombre    String   @db.VarChar(40)
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, nombre])
+  @@map("cajas")
 }

@@ -5,32 +5,51 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { obtenerEstadoCaja, cajaAbierta } from '@/lib/caja/estado'
+import { obtenerEstadoCaja, aperturaDeUsuario, usaVariasCajas } from '@/lib/caja/estado'
 import { bloqueoPorSuscripcion } from '@/lib/saas/suscripcion'
 
 const aperturaSchema = z.object({
   fondoInicial: z.coerce.number().min(0, 'El fondo no puede ser negativo').max(100000, 'Monto demasiado alto'),
   notas: z.string().trim().max(300).optional().or(z.literal('')),
+  cajaId: z.string().max(40).optional().or(z.literal('')),
 })
 
-/** Abre la caja con un fondo inicial en efectivo. Solo una apertura abierta a la vez. */
-export async function abrirCajaAction(data: { fondoInicial: number; notas?: string }) {
+/**
+ * Abre la caja con un fondo inicial en efectivo.
+ *   - Una sola caja: una apertura abierta a la vez para todo el negocio.
+ *   - Varias cajas: el usuario elige una caja libre; una caja abierta por usuario.
+ */
+export async function abrirCajaAction(data: { fondoInicial: number; notas?: string; cajaId?: string }) {
   const sesion = await requerirTenant()
   const parsed = aperturaSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   try {
+    const varias = await usaVariasCajas(sesion.tenantId)
+    let caja: { id: string; nombre: string } | null = null
+    if (varias) {
+      if (!parsed.data.cajaId) return { error: 'Elige qué caja vas a abrir' }
+      caja = await prisma.caja.findFirst({ where: { id: parsed.data.cajaId, tenantId: sesion.tenantId, activa: true }, select: { id: true, nombre: true } })
+      if (!caja) return { error: 'Caja no válida' }
+    }
     const creada = await prisma.$transaction(async (tx) => {
-      const abierta = await tx.aperturaCaja.findFirst({ where: { tenantId: sesion.tenantId, cerradaAt: null } })
-      if (abierta) return null
+      const abierta = await tx.aperturaCaja.findFirst({
+        where: { tenantId: sesion.tenantId, cerradaAt: null, ...(varias ? { OR: [{ usuarioId: sesion.sub }, { cajaId: caja!.id }] } : {}) },
+        select: { usuarioId: true, cajaNombre: true },
+      })
+      if (abierta) return { ocupada: abierta }
       return tx.aperturaCaja.create({
         data: {
           tenantId: sesion.tenantId, usuarioId: sesion.sub, usuarioNombre: sesion.nombre,
           fondoInicial: parsed.data.fondoInicial, notas: parsed.data.notas || null,
+          cajaId: caja?.id ?? null, cajaNombre: caja?.nombre ?? null,
         },
       })
     })
-    if (!creada) return { error: 'La caja ya está abierta' }
-    await registrarLog('AUDIT', 'CAJA', `Apertura de caja con fondo ${parsed.data.fondoInicial.toFixed(2)}`, undefined, sesion.tenantId)
+    if ('ocupada' in creada) {
+      if (!varias) return { error: 'La caja ya está abierta' }
+      return { error: creada.ocupada.usuarioId === sesion.sub ? `Ya tienes abierta la ${creada.ocupada.cajaNombre ?? 'caja'}` : `La ${caja!.nombre} ya está abierta por otro usuario` }
+    }
+    await registrarLog('AUDIT', 'CAJA', `Apertura de ${caja?.nombre ?? 'caja'} con fondo ${parsed.data.fondoInicial.toFixed(2)} por ${sesion.nombre}`, undefined, sesion.tenantId)
     revalidatePath('/caja')
     return { success: true }
   } catch (error: any) {
@@ -44,13 +63,23 @@ const cierreSchema = z.object({
   notas: z.string().trim().max(500).optional().or(z.literal('')),
 })
 
-export async function registrarCierreAction(data: { efectivoContado: number; notas?: string }) {
+/**
+ * Cierre con arqueo. Varias cajas: cada usuario cierra la suya; el ADMIN puede
+ * cerrar cualquiera indicando `aperturaId`.
+ */
+export async function registrarCierreAction(data: { efectivoContado: number; notas?: string; aperturaId?: string }) {
   const sesion = await requerirTenant()
   const parsed = cierreSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
+  const aperturaId = data.aperturaId ? String(data.aperturaId).slice(0, 40) : undefined
+  if (aperturaId && sesion.rol !== 'ADMIN') {
+    const propia = await prisma.aperturaCaja.findFirst({ where: { id: aperturaId, tenantId: sesion.tenantId, usuarioId: sesion.sub }, select: { id: true } })
+    if (!propia) return { error: 'Solo el administrador puede cerrar la caja de otro usuario' }
+  }
 
   const ahora = new Date()
-  const estado = await obtenerEstadoCaja(sesion.tenantId)
+  const estado = await obtenerEstadoCaja(sesion.tenantId, sesion.sub, aperturaId)
+  if (estado.varias && !estado.apertura) return { error: 'No tienes una caja abierta para cerrar' }
   const r = estado.resumen
   const contado = parsed.data.efectivoContado
   const diferencia = contado - r.efectivoEsperado
@@ -62,6 +91,8 @@ export async function registrarCierreAction(data: { efectivoContado: number; not
           tenantId: sesion.tenantId,
           usuarioId: sesion.sub,
           usuarioNombre: sesion.nombre,
+          aperturaId: estado.apertura?.id ?? null,
+          cajaNombre: estado.apertura?.caja ?? null,
           desde: estado.desde,
           hasta: ahora,
           fondoInicial: r.fondoInicial,
@@ -89,7 +120,7 @@ export async function registrarCierreAction(data: { efectivoContado: number; not
         })
       }
     })
-    await registrarLog('AUDIT', 'CAJA', `Cierre de caja: esperado ${r.efectivoEsperado.toFixed(2)}, contado ${contado.toFixed(2)}, diferencia ${diferencia.toFixed(2)}`, undefined, sesion.tenantId)
+    await registrarLog('AUDIT', 'CAJA', `Cierre de ${estado.apertura?.caja ?? 'caja'} por ${sesion.nombre}: esperado ${r.efectivoEsperado.toFixed(2)}, contado ${contado.toFixed(2)}, diferencia ${diferencia.toFixed(2)}`, undefined, sesion.tenantId)
     revalidatePath('/caja')
     return { success: true, diferencia }
   } catch (error: any) {
@@ -117,10 +148,10 @@ export async function registrarMovimientoCajaAction(data: z.infer<typeof movimie
   if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Datos inválidos' }
   const d = parsed.data
   try {
-    const apertura = await cajaAbierta(sesion.tenantId)
-    if (!apertura) return { error: 'La caja está cerrada: ábrela para registrar movimientos de efectivo' }
+    const apertura = await aperturaDeUsuario(sesion.tenantId, sesion.sub)
+    if (!apertura) return { error: 'No tienes una caja abierta: ábrela para registrar movimientos de efectivo' }
     if (d.tipo === 'RETIRO') {
-      const { resumen } = await obtenerEstadoCaja(sesion.tenantId)
+      const { resumen } = await obtenerEstadoCaja(sesion.tenantId, sesion.sub)
       if (d.monto > resumen.efectivoEsperado + 0.005) {
         return { error: `No puedes retirar más del efectivo que debería haber en caja ($${resumen.efectivoEsperado.toFixed(2)})` }
       }

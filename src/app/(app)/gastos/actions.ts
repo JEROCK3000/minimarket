@@ -6,6 +6,8 @@ import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { fechaDeDia } from '@/lib/utils/fechas'
+import { aperturaDeUsuario } from '@/lib/caja/estado'
+import { hoyLocalISO } from '@/lib/utils/fechas'
 
 const gastoSchema = z.object({
   categoria: z.string().trim().min(1, 'La categoría es requerida').max(60),
@@ -27,13 +29,17 @@ export async function crearGastoAction(data: GastoFormValues) {
   const d = parsed.data
 
   try {
+    // Un gasto de HOY sale de la caja abierta de quien lo registra; uno de otro día no.
+    const fecha = fechaDeDia(d.fecha)
+    const apertura = !d.fecha || d.fecha === hoyLocalISO() ? await aperturaDeUsuario(sesion.tenantId, sesion.sub) : null
     await prisma.gasto.create({
       data: {
         tenantId: sesion.tenantId,
+        aperturaId: apertura?.id ?? null,
         categoria: d.categoria,
         descripcion: d.descripcion,
         monto: d.monto,
-        fecha: fechaDeDia(d.fecha),
+        fecha,
       },
     })
     await registrarLog('AUDIT', 'GASTOS', `Gasto registrado: ${d.descripcion} (${d.monto})`, undefined, sesion.tenantId)

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { requerirTenant } from '@/lib/auth/tenant'
 import { prisma } from '@/lib/db/prisma'
 import { POSClient } from './POSClient'
-import { cajaAbierta } from '@/lib/caja/estado'
+import { cajaAbierta, usaVariasCajas } from '@/lib/caja/estado'
 import { usaControlCaja, leerConfigBalanza } from '@/lib/config/negocio'
 
 export const metadata: Metadata = { title: 'Punto de Venta' }
@@ -25,7 +25,7 @@ export default async function POSPage() {
       orderBy: { nombre: 'asc' },
       select: { id: true, nombre: true, icono: true },
     }),
-    cajaAbierta(sesion.tenantId),
+    cajaAbierta(sesion.tenantId, sesion.sub),
   ])
   // Sin control de caja (Configuración → Operación) se vende sin abrirla.
   const puedeVender = !(await usaControlCaja(sesion.tenantId)) || !!apertura
@@ -51,6 +51,18 @@ export default async function POSPage() {
       categorias={categorias.map((c) => ({ id: c.id, nombre: c.nombre, icono: c.icono }))}
       cajaAbierta={puedeVender}
       balanza={await leerConfigBalanza(sesion.tenantId)}
+      cajasLibres={puedeVender ? null : await cajasLibresPara(sesion.tenantId)}
     />
   )
+}
+
+/** Varias cajas: las activas que nadie tiene abiertas (null en modo una sola caja). */
+async function cajasLibresPara(tenantId: string) {
+  if (!(await usaVariasCajas(tenantId))) return null
+  const [cajas, abiertas] = await Promise.all([
+    prisma.caja.findMany({ where: { tenantId, activa: true }, orderBy: { nombre: 'asc' }, select: { id: true, nombre: true } }),
+    prisma.aperturaCaja.findMany({ where: { tenantId, cerradaAt: null }, select: { cajaId: true } }),
+  ])
+  const ocupadas = new Set(abiertas.map((a) => a.cajaId))
+  return cajas.filter((c) => !ocupadas.has(c.id))
 }

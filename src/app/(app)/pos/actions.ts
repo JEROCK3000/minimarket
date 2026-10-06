@@ -9,7 +9,7 @@ import { calcularVenta } from '@/lib/ventas/totales'
 import { moverStock } from '@/lib/inventario/movimientos'
 import { DIAS_CREDITO } from '@/lib/sri/impuestos'
 import { CONSUMIDOR_FINAL } from '@/lib/clientes/identificacion'
-import { cajaAbierta } from '@/lib/caja/estado'
+import { aperturaDeUsuario } from '@/lib/caja/estado'
 import { usaControlCaja } from '@/lib/config/negocio'
 import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 import { precioUnitarioPara } from '@/lib/ventas/presentaciones'
@@ -49,7 +49,9 @@ export async function registrarVentaAction(data: VentaFormValues) {
 
   // Con control de caja activo (Configuración → Operación), solo se vende con la
   // caja abierta: el arqueo depende de la apertura.
-  if ((await usaControlCaja(sesion.tenantId)) && !(await cajaAbierta(sesion.tenantId))) {
+  // Varias cajas: la venta va a la caja que abrió este usuario.
+  const apertura = await aperturaDeUsuario(sesion.tenantId, sesion.sub)
+  if ((await usaControlCaja(sesion.tenantId)) && !apertura) {
     return { error: 'La caja está cerrada. Ábrela para poder vender.', cajaCerrada: true }
   }
 
@@ -138,6 +140,7 @@ export async function registrarVentaAction(data: VentaFormValues) {
           tipoIdentificacionComprador: comprador?.tipoIdentificacion ?? null,
           identificacionComprador: comprador?.identificacion ?? null,
           usuarioId: sesion.sub,
+          aperturaId: apertura?.id ?? null,
           numero,
           formaPago: d.formaPago,
           subtotal,

@@ -8,7 +8,7 @@ import Link from 'next/link'
 
 export const metadata: Metadata = { title: 'Cierre de Caja' }
 
-export default async function CajaPage() {
+export default async function CajaPage({ searchParams }: { searchParams: Promise<{ apertura?: string }> }) {
   const sesion = await requerirTenant()
 
   if (!(await usaControlCaja(sesion.tenantId))) {
@@ -23,7 +23,17 @@ export default async function CajaPage() {
     )
   }
 
-  const estado = await obtenerEstadoCaja(sesion.tenantId)
+  const sp = await searchParams
+  const esAdmin = sesion.rol === 'ADMIN'
+  // El ADMIN puede revisar/cerrar la caja de otro usuario (?apertura=id)
+  const estado = await obtenerEstadoCaja(sesion.tenantId, sesion.sub, esAdmin && sp.apertura ? String(sp.apertura).slice(0, 40) : undefined)
+  const [abiertas, cajas] = estado.varias
+    ? await Promise.all([
+        prisma.aperturaCaja.findMany({ where: { tenantId: sesion.tenantId, cerradaAt: null }, orderBy: { abiertaAt: 'asc' }, select: { id: true, cajaId: true, cajaNombre: true, usuarioId: true, usuarioNombre: true, abiertaAt: true } }),
+        prisma.caja.findMany({ where: { tenantId: sesion.tenantId, activa: true }, orderBy: { nombre: 'asc' }, select: { id: true, nombre: true } }),
+      ])
+    : [[], []]
+  const ocupadas = new Set(abiertas.map((a) => a.cajaId))
 
   const cierres = await prisma.cierreCaja.findMany({
     where: { tenantId: sesion.tenantId },
@@ -33,7 +43,7 @@ export default async function CajaPage() {
   const cierresPlanos = cierres.map((c) => ({
     id: c.id,
     fecha: c.createdAt.toISOString(),
-    usuario: c.usuarioNombre ?? '—',
+    usuario: `${c.usuarioNombre ?? '—'}${c.cajaNombre ? ` · ${c.cajaNombre}` : ''}`,
     totalVendido: Number(c.totalVendido),
     efectivoEsperado: Number(c.efectivoEsperado),
     efectivoContado: Number(c.efectivoContado),
@@ -47,6 +57,10 @@ export default async function CajaPage() {
       origenDesde={estado.origenDesde}
       apertura={estado.apertura}
       cierres={cierresPlanos}
+      varias={estado.varias}
+      esAdmin={esAdmin}
+      cajasLibres={cajas.filter((c) => !ocupadas.has(c.id))}
+      abiertas={(esAdmin ? abiertas : []).map((a) => ({ id: a.id, caja: a.cajaNombre ?? 'Caja', usuario: a.usuarioNombre ?? '—', propia: a.usuarioId === sesion.sub, abiertaAt: a.abiertaAt.toISOString() }))}
     />
   )
 }

@@ -8,6 +8,7 @@ import { consultarRucSRI } from '@/lib/sri/consulta-ruc'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { redondear2 } from '@/lib/ventas/totales'
+import { aperturaDeUsuario } from '@/lib/caja/estado'
 
 const proveedorSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es requerido').max(150),
@@ -142,6 +143,8 @@ export async function pagarProveedorAction(data: { proveedorId: string; monto: n
   const prov = await prisma.proveedor.findFirst({ where: { id: d.proveedorId, tenantId: sesion.tenantId }, select: { nombre: true } })
   if (!prov) return { error: 'Proveedor no encontrado' }
   try {
+    // Va a la caja abierta de quien lo registra (varias cajas)
+    const apertura = await aperturaDeUsuario(sesion.tenantId, sesion.sub)
     const r = await prisma.$transaction(async (tx) => {
       const compras = await tx.compra.findMany({
         where: { tenantId: sesion.tenantId, proveedorId: d.proveedorId, estado: 'ACTIVA', saldoPendiente: { gt: 0 } },
@@ -162,7 +165,7 @@ export async function pagarProveedorAction(data: { proveedorId: string; monto: n
         if (u.count === 0) throw new ErrorNegocio('El saldo cambió mientras se registraba el pago. Intenta de nuevo.')
         await tx.pagoCompra.create({
           data: {
-            tenantId: sesion.tenantId, compraId: c.id, proveedorId: d.proveedorId, monto: aplicar, formaPago: d.formaPago,
+            tenantId: sesion.tenantId, aperturaId: apertura?.id ?? null, compraId: c.id, proveedorId: d.proveedorId, monto: aplicar, formaPago: d.formaPago,
             notas: d.notas || null, usuarioId: sesion.sub, usuarioNombre: sesion.nombre,
           },
         })

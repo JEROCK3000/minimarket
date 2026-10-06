@@ -94,3 +94,65 @@ export async function enviarResumenAhoraAction() {
     return { error: 'No se pudo enviar. Revisa la configuración de correo (Configuración → Correo).' }
   }
 }
+
+// ─── Varias cajas ─────────────────────────────────────────────────────────────
+const nombreCaja = z.string().trim().min(1, 'Nombre requerido').max(40)
+
+/** Pasar de una a varias cajas (o al revés) con una caja abierta mezclaría los arqueos. */
+async function hayCajaAbierta(tenantId: string) {
+  return !!(await prisma.aperturaCaja.findFirst({ where: { tenantId, cerradaAt: null }, select: { id: true } }))
+}
+
+export async function crearCajaAction(nombre: string) {
+  const sesion = await requerirTenant('ADMIN')
+  const parsed = nombreCaja.safeParse(nombre)
+  if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Nombre inválido' }
+  const activas = await prisma.caja.count({ where: { tenantId: sesion.tenantId, activa: true } })
+  if (activas === 0 && await hayCajaAbierta(sesion.tenantId)) return { error: 'Cierra la caja abierta antes de activar varias cajas' }
+  try {
+    await prisma.caja.create({ data: { tenantId: sesion.tenantId, nombre: parsed.data } })
+  } catch (error: any) {
+    if (error?.code === 'P2002') return { error: 'Ya existe una caja con ese nombre' }
+    await registrarLog('ERROR', 'CONFIG', `Error creando caja: ${error.message || error}`, undefined, sesion.tenantId)
+    return { error: 'No se pudo crear la caja' }
+  }
+  await registrarLog('AUDIT', 'CONFIG', `Caja creada: ${parsed.data} por ${sesion.email}`, undefined, sesion.tenantId)
+  revalidatePath('/configuracion/operacion'); revalidatePath('/caja'); revalidatePath('/pos')
+  return { success: true }
+}
+
+export async function renombrarCajaAction(id: string, nombre: string) {
+  const sesion = await requerirTenant('ADMIN')
+  const parsed = nombreCaja.safeParse(nombre)
+  if (!parsed.success) return { error: parsed.error.errors[0]?.message || 'Nombre inválido' }
+  try {
+    const r = await prisma.caja.updateMany({ where: { id: String(id), tenantId: sesion.tenantId }, data: { nombre: parsed.data } })
+    if (r.count === 0) return { error: 'Caja no encontrada' }
+  } catch (error: any) {
+    if (error?.code === 'P2002') return { error: 'Ya existe una caja con ese nombre' }
+    return { error: 'No se pudo renombrar la caja' }
+  }
+  await registrarLog('AUDIT', 'CONFIG', `Caja renombrada a ${parsed.data} por ${sesion.email}`, undefined, sesion.tenantId)
+  revalidatePath('/configuracion/operacion')
+  return { success: true }
+}
+
+export async function cambiarEstadoCajaAction(id: string, activa: boolean) {
+  const sesion = await requerirTenant('ADMIN')
+  const caja = await prisma.caja.findFirst({ where: { id: String(id), tenantId: sesion.tenantId }, select: { id: true, nombre: true } })
+  if (!caja) return { error: 'Caja no encontrada' }
+  if (!activa) {
+    if (await prisma.aperturaCaja.findFirst({ where: { tenantId: sesion.tenantId, cajaId: caja.id, cerradaAt: null }, select: { id: true } })) {
+      return { error: `La ${caja.nombre} está abierta: ciérrala primero` }
+    }
+    const activas = await prisma.caja.count({ where: { tenantId: sesion.tenantId, activa: true } })
+    if (activas === 1 && await hayCajaAbierta(sesion.tenantId)) return { error: 'Cierra todas las cajas antes de volver a una sola caja' }
+  } else {
+    const activas = await prisma.caja.count({ where: { tenantId: sesion.tenantId, activa: true } })
+    if (activas === 0 && await hayCajaAbierta(sesion.tenantId)) return { error: 'Cierra la caja abierta antes de activar varias cajas' }
+  }
+  await prisma.caja.update({ where: { id: caja.id }, data: { activa: activa === true } })
+  await registrarLog('AUDIT', 'CONFIG', `Caja ${caja.nombre} ${activa ? 'activada' : 'desactivada'} por ${sesion.email}`, undefined, sesion.tenantId)
+  revalidatePath('/configuracion/operacion'); revalidatePath('/caja'); revalidatePath('/pos')
+  return { success: true }
+}

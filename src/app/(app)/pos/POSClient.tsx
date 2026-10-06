@@ -33,7 +33,10 @@ const unidadesEnCarrito = (c: ItemCarrito[], productoId: string, excepto?: strin
   c.filter((it) => it.id === productoId && it.key !== excepto).reduce((s, it) => s + it.cantidad * (it.pres?.factor ?? 1), 0)
 interface ClienteSel { id: string; nombre: string; identificacion: string; telefono?: string | null; email?: string | null; direccion?: string | null }
 
-export function POSClient({ productos, categorias, cajaAbierta, balanza }: { productos: Prod[]; categorias: Cat[]; cajaAbierta: boolean; balanza: ConfigBalanza }) {
+export function POSClient({ productos, categorias, cajaAbierta, balanza, cajasLibres = null }: {
+  productos: Prod[]; categorias: Cat[]; cajaAbierta: boolean; balanza: ConfigBalanza
+  cajasLibres?: { id: string; nombre: string }[] | null // varias cajas: las que se pueden abrir; null = una sola caja
+}) {
   // Sin caja abierta no se vende: se pide abrirla con su fondo inicial.
   const [cajaCerrada, setCajaCerrada] = useState(!cajaAbierta)
   const [busqueda, setBusqueda] = useState('')
@@ -337,7 +340,7 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza }: { pro
       )}
 
       {ultimaVenta && <VentaExitosa venta={ultimaVenta} onClose={() => setUltimaVenta(null)} />}
-      {cajaCerrada && <AbrirCajaModal onAbierta={() => setCajaCerrada(false)} />}
+      {cajaCerrada && <AbrirCajaModal cajas={cajasLibres} onAbierta={() => setCajaCerrada(false)} />}
       {elegirPres && (
         <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/50" onClick={() => { setElegirPres(null); buscarRef.current?.focus() }}>
           <div className="w-full max-w-sm bg-white dark:bg-[#0f0f1e] rounded-2xl shadow-xl p-5 space-y-3" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`Presentación de ${elegirPres.nombre}`}>
@@ -574,15 +577,16 @@ function VentaExitosa({ venta, onClose }: { venta: any; onClose: () => void }) {
 }
 
 // ─── Modal: abrir caja (obligatorio para vender) ──────────────────────────────
-function AbrirCajaModal({ onAbierta }: { onAbierta: () => void }) {
+function AbrirCajaModal({ onAbierta, cajas }: { onAbierta: () => void; cajas: { id: string; nombre: string }[] | null }) {
   const router = useRouter()
   const [fondo, setFondo] = useState('')
+  const [cajaId, setCajaId] = useState(cajas?.[0]?.id ?? '')
   const [abriendo, setAbriendo] = useState(false)
   const abrir = async (e: React.FormEvent) => {
     e.preventDefault()
     setAbriendo(true)
     try {
-      const r = await abrirCajaAction({ fondoInicial: Number(fondo || 0) })
+      const r = await abrirCajaAction({ fondoInicial: Number(fondo || 0), cajaId: cajas ? cajaId : undefined })
       // "Ya está abierta" (otro usuario la abrió): también se puede vender.
       if ('error' in r && r.error !== 'La caja ya está abierta') { toast.error(r.error); return }
       toast.success('Caja abierta. ¡Buenas ventas!')
@@ -595,14 +599,24 @@ function AbrirCajaModal({ onAbierta }: { onAbierta: () => void }) {
       <form onSubmit={abrir} className="w-full max-w-sm bg-white dark:bg-[#0f0f1e] rounded-2xl shadow-xl p-6 space-y-4" role="dialog" aria-modal="true" aria-labelledby="titulo-abrir-caja">
         <div className="text-center">
           <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-500/10 grid place-items-center mx-auto mb-3"><DoorOpen size={24} className="text-brand-600" /></div>
-          <h2 id="titulo-abrir-caja" className="font-black text-lg text-gray-900 dark:text-white">La caja está cerrada</h2>
+          <h2 id="titulo-abrir-caja" className="font-black text-lg text-gray-900 dark:text-white">{cajas ? 'Abre tu caja' : 'La caja está cerrada'}</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Para vender, abre la caja indicando con cuánto efectivo empiezas (fondo o sencillo).</p>
         </div>
+ {cajas && (
+          <div className="space-y-1.5">
+            <label htmlFor="caja-pos" className="text-xs font-semibold text-gray-500 dark:text-gray-400">Caja</label>
+            {cajas.length > 0 ? (
+              <select id="caja-pos" value={cajaId} onChange={(e) => setCajaId(e.target.value)} className="input">
+                {cajas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            ) : <p className="text-sm text-amber-700 dark:text-amber-400">Todas las cajas están abiertas por otros usuarios.</p>}
+          </div>
+        )}
         <div className="space-y-1.5">
           <label htmlFor="fondo-pos" className="text-xs font-semibold text-gray-500 dark:text-gray-400">Fondo inicial en efectivo</label>
           <input id="fondo-pos" type="number" step="0.01" min="0" value={fondo} onChange={(e) => setFondo(e.target.value)} className="input text-lg" placeholder="0.00" autoFocus />
         </div>
-        <button type="submit" disabled={abriendo} className="btn-primary w-full h-11">
+        <button type="submit" disabled={abriendo || (!!cajas && cajas.length === 0)} className="btn-primary w-full h-11">
           {abriendo ? <Loader2 size={16} className="animate-spin" /> : <DoorOpen size={16} />} Abrir caja
         </button>
         <Link href="/dashboard" className="block text-center text-xs text-gray-400 hover:text-gray-600">Volver al inicio</Link>

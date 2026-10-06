@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { redondear2 } from '@/lib/ventas/totales'
 import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
+import { aperturaDeUsuario } from '@/lib/caja/estado'
 
 export interface VentaPendiente { id: string; numero: string; fecha: string; total: number; saldo: number; vence: string | null; vencida: boolean }
 export interface AbonoRow { id: string; fecha: string; monto: number; formaPago: string; venta: string; usuario: string | null; notas: string | null }
@@ -76,6 +77,8 @@ export async function registrarAbonoAction(data: { clienteId: string; monto: num
   if (!cliente) return { error: 'Cliente no encontrado' }
 
   try {
+    // Va a la caja abierta de quien lo registra (varias cajas)
+    const apertura = await aperturaDeUsuario(sesion.tenantId, sesion.sub)
     const aplicados = await prisma.$transaction(async (tx) => {
       const ventas = await tx.venta.findMany({
         where: { tenantId: sesion.tenantId, clienteId: d.clienteId, estado: 'COMPLETADA', saldoPendiente: { gt: 0 } },
@@ -98,7 +101,7 @@ export async function registrarAbonoAction(data: { clienteId: string; monto: num
         if (r.count === 0) throw new ErrorNegocio('El saldo cambió mientras se registraba el cobro. Intenta de nuevo.')
         await tx.abonoVenta.create({
           data: {
-            tenantId: sesion.tenantId, ventaId: v.id, clienteId: d.clienteId, monto: aplicar, formaPago: d.formaPago,
+            tenantId: sesion.tenantId, aperturaId: apertura?.id ?? null, ventaId: v.id, clienteId: d.clienteId, monto: aplicar, formaPago: d.formaPago,
             notas: d.notas || null, usuarioId: sesion.sub, usuarioNombre: sesion.nombre,
           },
         })

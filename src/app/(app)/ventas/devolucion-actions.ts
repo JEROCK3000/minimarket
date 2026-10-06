@@ -13,7 +13,7 @@ import { compradorDeVenta } from '@/lib/ventas/comprador'
 import { emitirNotaCreditoSri, consultarAutorizacionNC, numeroDesdeClave } from '@/lib/sri/emitir-nc'
 import { ENDPOINTS_SRI } from '@/lib/sri/helpers'
 import { usaControlCaja } from '@/lib/config/negocio'
-import { cajaAbierta, obtenerEstadoCaja } from '@/lib/caja/estado'
+import { aperturaDeUsuario, obtenerEstadoCaja } from '@/lib/caja/estado'
 import { descripcionItem } from '@/lib/ventas/presentaciones'
 
 /**
@@ -76,7 +76,7 @@ export async function obtenerDatosDevolucionAction(ventaId: string) {
         precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje),
         devuelto: devuelto.get(it.id) ?? { cantidad: 0, descuento: 0, base: 0, iva: 0 },
       })),
-      caja: { control, abierta: control ? !!(await cajaAbierta(sesion.tenantId)) : true },
+      caja: { control, abierta: control ? !!(await aperturaDeUsuario(sesion.tenantId, sesion.sub)) : true },
     }
   } catch (error: any) {
     if (error instanceof ErrorNegocio) return { error: error.message }
@@ -98,7 +98,7 @@ type Pendiente = Omit<DevolucionValues, 'ventaId'>
 
 /** Aplica la devolución en una transacción (re-valida cantidades dentro de ella). */
 async function aplicarDevolucion(p: {
-  tenantId: string; usuarioNombre: string; ventaId: string; ventaNumero: string; d: Pendiente
+  tenantId: string; usuarioId: string; usuarioNombre: string; ventaId: string; ventaNumero: string; d: Pendiente
   nc?: { existenteId?: string; claveAcceso: string; numeroAutorizacion: string; xml: string; fechaAutorizacion: Date }
 }) {
   return prisma.$transaction(async (tx) => {
@@ -111,11 +111,12 @@ async function aplicarDevolucion(p: {
         Number(venta.descuento), await yaDevuelto(venta.id, tx), new Map(p.d.items.map((i) => [i.ventaItemId, i.cantidad])),
       )
     } catch (e: any) { throw new ErrorNegocio(e.message) }
+    const apertura = await aperturaDeUsuario(p.tenantId, p.usuarioId) // caja de quien devuelve
     const n = await tx.devolucion.count({ where: { tenantId: p.tenantId } })
     const numero = `DEV-${String(n + 1).padStart(5, '0')}`
     const dev = await tx.devolucion.create({
       data: {
-        tenantId: p.tenantId, ventaId: venta.id, numero, motivo: p.d.motivo,
+        tenantId: p.tenantId, ventaId: venta.id, aperturaId: apertura?.id ?? null, numero, motivo: p.d.motivo,
         subtotal: calc.subtotal, descuento: calc.descuento, iva: calc.iva, total: calc.total,
         formaReembolso: p.d.formaReembolso, reingresaStock: p.d.reingresaStock, usuarioNombre: p.usuarioNombre,
         items: { create: calc.lineas.map((l) => ({
@@ -177,15 +178,15 @@ export async function registrarDevolucionAction(data: DevolucionValues) {
       return { error: 'Esta venta es fiada y el cliente aún debe: la devolución se descuenta de su saldo' }
     }
     if (d.formaReembolso === 'EFECTIVO' && await usaControlCaja(sesion.tenantId)) {
-      if (!(await cajaAbierta(sesion.tenantId))) return { error: 'Para devolver efectivo la caja debe estar abierta' }
-      const { resumen } = await obtenerEstadoCaja(sesion.tenantId)
+      if (!(await aperturaDeUsuario(sesion.tenantId, sesion.sub))) return { error: 'Para devolver efectivo tu caja debe estar abierta' }
+      const { resumen } = await obtenerEstadoCaja(sesion.tenantId, sesion.sub)
       if (calc.total > resumen.efectivoEsperado + 0.005) return { error: `No hay suficiente efectivo en caja ($${resumen.efectivoEsperado.toFixed(2)}) para devolver $${calc.total.toFixed(2)}` }
     }
 
     const pendiente: Pendiente = { items: d.items, motivo: d.motivo, formaReembolso: d.formaReembolso, reingresaStock: d.reingresaStock }
 
     if (!conFactura) {
-      const r = await aplicarDevolucion({ tenantId: sesion.tenantId, usuarioNombre: sesion.nombre, ventaId: venta.id, ventaNumero: venta.numero, d: pendiente })
+      const r = await aplicarDevolucion({ tenantId: sesion.tenantId, usuarioId: sesion.sub, usuarioNombre: sesion.nombre, ventaId: venta.id, ventaNumero: venta.numero, d: pendiente })
       await registrarLog('AUDIT', 'VENTAS', `Devolución ${r.numero} de la venta ${venta.numero}: $${r.total.toFixed(2)} (${d.formaReembolso}) por ${sesion.email}`, undefined, sesion.tenantId)
       revalidar()
       return { success: true, numero: r.numero, total: r.total }
@@ -208,7 +209,7 @@ export async function registrarDevolucionAction(data: DevolucionValues) {
     if (r.estado === 'AUTORIZADA') {
       let ap: { numero: string; total: number }
       try {
-        ap = await aplicarDevolucion({ tenantId: sesion.tenantId, usuarioNombre: sesion.nombre, ventaId: venta.id, ventaNumero: venta.numero, d: pendiente,
+        ap = await aplicarDevolucion({ tenantId: sesion.tenantId, usuarioId: sesion.sub, usuarioNombre: sesion.nombre, ventaId: venta.id, ventaNumero: venta.numero, d: pendiente,
           nc: { claveAcceso: r.claveAcceso, numeroAutorizacion: r.numeroAutorizacion, xml: r.xml, fechaAutorizacion: r.fechaAutorizacion } })
       } catch (e: any) {
         // El SRI ya la autorizó: no se pierde. Queda PENDIENTE de aplicar y "Consultar SRI" la aplica.
@@ -254,7 +255,7 @@ export async function consultarDevolucionPendienteAction(ncId: string) {
     const aut = await consultarAutorizacionNC(nc.claveAcceso, (emisor.ambiente === 1 ? ENDPOINTS_SRI.pruebas : ENDPOINTS_SRI.produccion).autorizacion, 2)
     if (!aut) return { error: 'El SRI aún no responde. Intenta de nuevo en unos minutos.' }
     if (aut.estado === 'AUTORIZADO' || aut.estado === 'AUTORIZADA') {
-      const ap = await aplicarDevolucion({ tenantId: sesion.tenantId, usuarioNombre: sesion.nombre, ventaId: nc.venta.id, ventaNumero: nc.venta.numero, d: nc.datosPendientes as unknown as Pendiente,
+      const ap = await aplicarDevolucion({ tenantId: sesion.tenantId, usuarioId: sesion.sub, usuarioNombre: sesion.nombre, ventaId: nc.venta.id, ventaNumero: nc.venta.numero, d: nc.datosPendientes as unknown as Pendiente,
         nc: { existenteId: nc.id, claveAcceso: nc.claveAcceso, numeroAutorizacion: aut.numeroAutorizacion, xml: aut.comprobante, fechaAutorizacion: new Date(aut.fechaAutorizacion) } })
       await registrarLog('AUDIT', 'VENTAS', `NC parcial autorizada al consultar (${nc.claveAcceso}): devolución ${ap.numero} $${ap.total.toFixed(2)}`, undefined, sesion.tenantId)
       revalidar()
