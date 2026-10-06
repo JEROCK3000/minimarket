@@ -16,14 +16,14 @@ const TABS = [
 export function ConfigTabs() {
   const pathname = usePathname()
   return (
-    <div className="flex gap-1 border-b border-gray-100 dark:border-white/5 overflow-x-auto">
+    <div className="flex gap-1 border-b border-gray-100 dark:border-white/5 overflow-x-auto sm:overflow-visible sm:flex-wrap">
       {TABS.map((t) => {
         const activo = pathname === t.href
         return (
           <Link
             key={t.href}
             href={t.href}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition ${
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition whitespace-nowrap shrink-0 ${
               activo
                 ? 'border-brand-600 text-gray-900 dark:text-white'
                 : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white'

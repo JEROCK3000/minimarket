@@ -115,3 +115,9 @@ export async function enviarCorreoPrueba(tenantId: string, destinatario: string)
     html: '<p style="font-family:Arial">Tu configuración SMTP funciona correctamente. Ya puedes enviar facturas por correo.</p>',
   })
 }
+
+/** Envía el resumen diario del negocio a los correos del dueño. */
+export async function enviarResumenDiario(tenantId: string, destinatarios: string[], asunto: string, html: string) {
+  const { transporter, from } = await obtenerTransporter(tenantId)
+  await transporter.sendMail({ from, to: destinatarios.join(', '), subject: asunto, html })
+}

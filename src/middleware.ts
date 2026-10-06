@@ -9,7 +9,7 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET)
 const COOKIE_SESION = 'sol_session'
 
-const RUTAS_PUBLICAS = ['/login', '/recuperar', '/restablecer', '/api/auth', '/registro']
+const RUTAS_PUBLICAS = ['/login', '/recuperar', '/restablecer', '/api/auth', '/registro', '/api/cron'] // /api/cron se protege con CRON_SECRET
 const RUTA_LOGIN = '/login'
 
 export async function middleware(request: NextRequest) {
