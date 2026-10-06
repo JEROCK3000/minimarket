@@ -5,7 +5,7 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { revalidatePath } from 'next/cache'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
-import { calcularVenta } from '@/lib/ventas/totales'
+import { calcularVenta, lineasDeItems } from '@/lib/ventas/totales'
 import { emitirNotaCreditoSri } from '@/lib/sri/emitir-nc'
 import { moverStock } from '@/lib/inventario/movimientos'
 import { bloqueoPorSuscripcion } from '@/lib/saas/suscripcion'
@@ -49,9 +49,7 @@ export async function emitirNotaCreditoAction(ventaId: string, motivo: string) {
 
     // Mismo cálculo que la factura original (tarifa de IVA por producto).
     const calculo = calcularVenta(
-      venta.items.map((it) => ({
-        cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje),
-      })),
+      lineasDeItems(venta.items),
       Number(venta.descuento),
     )
     const total = calculo.total

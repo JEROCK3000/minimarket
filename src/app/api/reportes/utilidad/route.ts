@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { registrarLog } from '@/lib/logs/logger'
-import { calcularVenta } from '@/lib/ventas/totales'
+import { calcularVenta, lineasDeItems } from '@/lib/ventas/totales'
 import { responderReporte, rangoFechas } from '@/lib/reports/tabla'
 import { contextoReporte, noAutorizado, errorReporte, formatoDe } from '../_comun'
 
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     for (const v of ventas) {
       // Base sin IVA por línea, con el descuento de la venta prorrateado (mismo cálculo que la factura).
       const calc = calcularVenta(
-        v.items.map((it) => ({ cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje) })),
+        lineasDeItems(v.items),
         Number(v.descuento),
       )
       v.items.forEach((it, i) => {

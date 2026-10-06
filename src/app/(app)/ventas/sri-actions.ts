@@ -10,7 +10,7 @@ import { signInvoiceXml } from 'ec-sri-invoice-signer'
 import { format } from 'date-fns'
 import { ENDPOINTS_SRI, mapTipoIdentificacion, generarClaveAcceso, envolverFactura } from '@/lib/sri/helpers'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
-import { calcularVenta } from '@/lib/ventas/totales'
+import { calcularVenta, lineasDeItems } from '@/lib/ventas/totales'
 import { codigoPorcentajeIva, formaPagoSri } from '@/lib/sri/impuestos'
 import { camposAdicionalesEmision } from '@/lib/sri/info-adicional'
 import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
@@ -58,9 +58,7 @@ export async function emitirFacturaVentaAction(ventaId: string) {
     // Totales por línea con la tarifa de IVA de cada producto (0%, 15%…),
     // mismo cálculo que al registrar la venta (ver lib/ventas/totales.ts).
     const calculo = calcularVenta(
-      venta.items.map((it) => ({
-        cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje),
-      })),
+      lineasDeItems(venta.items),
       Number(venta.descuento),
     )
 
@@ -88,7 +86,7 @@ export async function emitirFacturaVentaAction(ventaId: string) {
         identificacionComprador: comprador.identificacion,
         direccionComprador: venta.cliente.direccion || emisor.dirEstablecimiento,
         totalSinImpuestos: calculo.base.toFixed(2),
-        totalDescuento: calculo.descuento.toFixed(2),
+        totalDescuento: calculo.descuentoTotal.toFixed(2),
         totalConImpuestos: {
           totalImpuesto: calculo.porTarifa.map((t) => ({
             codigo: '2' as const,

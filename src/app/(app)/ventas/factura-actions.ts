@@ -8,7 +8,7 @@ import { enviarFacturaPorEmail } from '@/lib/utils/email'
 import { format } from 'date-fns'
 import { readFileSync, existsSync } from 'fs'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
-import { calcularVenta } from '@/lib/ventas/totales'
+import { calcularVenta, lineasDeItems } from '@/lib/ventas/totales'
 import { extraerInfoAdicional } from '@/lib/sri/info-adicional'
 import { descripcionItem } from '@/lib/ventas/presentaciones'
 
@@ -218,10 +218,10 @@ export async function enviarNCEmailAction(ventaId: string, emailManual?: string,
  */
 function datosRide(venta: {
   descuento: unknown
-  items: { productoId: string; cantidad: unknown; precioUnitario: unknown; presentacion?: string | null; producto: { nombre: string; ivaPorcentaje: unknown } }[]
+  items: { productoId: string; cantidad: unknown; precioUnitario: unknown; descuento?: unknown; presentacion?: string | null; producto: { nombre: string; ivaPorcentaje: unknown } }[]
 }) {
   const calc = calcularVenta(
-    venta.items.map((it) => ({ cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje) })),
+    lineasDeItems(venta.items),
     Number(venta.descuento),
   )
   const baseDe = (gravada: boolean) => calc.porTarifa.filter((t) => (t.tarifa > 0) === gravada).reduce((a, t) => a + t.base, 0)
@@ -232,7 +232,7 @@ function datosRide(venta: {
     })),
     totales: {
       subtotal15: baseDe(true), subtotal0: baseDe(false), subtotalSinImpuestos: calc.base,
-      descuento: calc.descuento, iva: calc.iva, total: calc.total,
+      descuento: calc.descuentoTotal, iva: calc.iva, total: calc.total,
     },
   }
 }

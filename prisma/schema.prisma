@@ -507,6 +507,9 @@ model VentaItem {
   presentacionId String?  @db.VarChar(40)
   presentacion   String?  @db.VarChar(60)
   factor         Decimal  @default(1) @db.Decimal(10, 3)
+  // Promoción aplicada a la línea (2x1, % …): descuento en USD sin IVA y nombre congelado
+  descuento      Decimal  @default(0) @db.Decimal(12, 2)
+  promocion      String?  @db.VarChar(80)
 
   devolucionItems DevolucionItem[]
 
@@ -851,4 +854,27 @@ model Caja {
 
   @@unique([tenantId, nombre])
   @@map("cajas")
+}
+
+/// Promociones: N×M (2x1, 3x2) por producto, o % de descuento por producto,
+/// categoría o toda la tienda; con vigencia por fechas y, opcional, días de la semana.
+model Promocion {
+  id          String   @id @default(cuid())
+  tenantId    String
+  nombre      String   @db.VarChar(80)
+  tipo        String   @db.VarChar(12) // NXM | PORCENTAJE
+  productoId  String?  @db.VarChar(40)
+  categoriaId String?  @db.VarChar(40)
+  lleva       Int? // NXM: lleva N…
+  paga        Int? // …paga M
+  porcentaje  Decimal? @db.Decimal(5, 2)
+  desde       DateTime @db.Date
+  hasta       DateTime @db.Date
+  dias        String?  @db.VarChar(20) // días de la semana "1,3" (0 = domingo); null = todos
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, activa])
+  @@map("promociones")
 }

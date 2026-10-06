@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db/prisma'
 import { requerirTenant } from '@/lib/auth/tenant'
 import { registrarLog } from '@/lib/logs/logger'
 import { format } from 'date-fns'
-import { calcularVenta } from '@/lib/ventas/totales'
+import { calcularVenta, lineasDeItems } from '@/lib/ventas/totales'
 import { compradorDeVenta } from '@/lib/ventas/comprador'
 import { formaPagoSri } from '@/lib/sri/impuestos'
 import { ticketFactura, ticketVenta, ticketPrueba, etiquetasPrecio } from '@/lib/print/escpos'
@@ -40,9 +40,7 @@ export async function ticketTermicoAction(ventaId: string): Promise<ResultadoTic
       descripcion: descripcionItem(it.producto.nombre, it.presentacion), cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario),
     }))
     const totales = calcularVenta(
-      venta.items.map((it) => ({
-        cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje),
-      })),
+      lineasDeItems(venta.items),
       Number(venta.descuento),
     )
     const pagoCon = venta.pagoCon != null ? Number(venta.pagoCon) : null
@@ -60,7 +58,7 @@ export async function ticketTermicoAction(ventaId: string): Promise<ResultadoTic
         numero: `${ca.substring(24, 27)}-${ca.substring(27, 30)}-${ca.substring(30, 39)}`,
         fechaEmision: `${ca.substring(0, 2)}/${ca.substring(2, 4)}/${ca.substring(4, 8)}`,
         cliente: { nombre: venta.cliente.nombre, identificacion: comprador.identificacion, direccion: venta.cliente.direccion },
-        items, totales,
+        items, totales: { ...totales, descuento: totales.descuentoTotal }, // incluye promociones
         formaPagoSri: formaPagoSri(venta.formaPago),
         pagoCon,
         numeroAutorizacion: venta.factura.numeroAutorizacion,
@@ -81,7 +79,7 @@ export async function ticketTermicoAction(ventaId: string): Promise<ResultadoTic
       numero: venta.numero,
       fecha: format(venta.fecha, 'dd/MM/yyyy HH:mm'),
       cliente: { nombre: venta.cliente?.nombre ?? 'CONSUMIDOR FINAL', identificacion: comprador?.identificacion ?? null },
-      items, totales,
+      items, totales: { ...totales, descuento: totales.descuentoTotal }, // incluye promociones
       formaPago: venta.formaPago,
       pagoCon,
       facturaPendiente: venta.requiereFactura && venta.estado !== 'ANULADA',

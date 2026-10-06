@@ -3,6 +3,7 @@ import { requerirTenant } from '@/lib/auth/tenant'
 import { prisma } from '@/lib/db/prisma'
 import { POSClient } from './POSClient'
 import { cajaAbierta, usaVariasCajas } from '@/lib/caja/estado'
+import { promocionesDeHoy } from '@/lib/ventas/promociones-db'
 import { usaControlCaja, leerConfigBalanza } from '@/lib/config/negocio'
 
 export const metadata: Metadata = { title: 'Punto de Venta' }
@@ -36,6 +37,7 @@ export default async function POSPage() {
     codigoBarras: p.codigoBarras,
     codigoBalanza: p.codigoBalanza,
     categoriaNombre: p.categoria?.nombre ?? null,
+    categoriaId: p.categoriaId,
     precioVenta: Number(p.precioVenta),
     ivaPorcentaje: Number(p.ivaPorcentaje),
     stock: Number(p.stock),
@@ -51,6 +53,7 @@ export default async function POSPage() {
       categorias={categorias.map((c) => ({ id: c.id, nombre: c.nombre, icono: c.icono }))}
       cajaAbierta={puedeVender}
       balanza={await leerConfigBalanza(sesion.tenantId)}
+      promociones={await promocionesDeHoy(sesion.tenantId)}
       cajasLibres={puedeVender ? null : await cajasLibresPara(sesion.tenantId)}
     />
   )

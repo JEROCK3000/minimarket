@@ -42,7 +42,7 @@ export function DevolucionModal({ ventaId, onClose }: { ventaId: string; onClose
     const solicitado = new Map(Object.entries(cantidades).map(([k, v]) => [k, Number(v) || 0]).filter(([, v]) => (v as number) > 0) as [string, number][])
     try {
       return calcularDevolucion(
-        datos.lineas.map((l) => ({ id: l.id, cantidad: l.cantidad, precioUnitario: l.precioUnitario, ivaPorcentaje: l.ivaPorcentaje })),
+        datos.lineas.map((l) => ({ id: l.id, cantidad: l.cantidad, precioUnitario: l.precioUnitario, ivaPorcentaje: l.ivaPorcentaje, descuentoLinea: l.descuentoLinea })),
         datos.venta.descuento, new Map(datos.lineas.map((l) => [l.id, l.devuelto])), solicitado,
       )
     } catch (e: any) { return { error: e.message as string } }

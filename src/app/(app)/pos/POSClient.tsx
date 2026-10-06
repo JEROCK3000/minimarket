@@ -16,9 +16,10 @@ import { calcularVenta } from '@/lib/ventas/totales'
 import { urlImagenProducto } from '@/lib/productos/url'
 import { leerEtiquetaBalanza, mismoPlu, type ConfigBalanza } from '@/lib/pos/balanza'
 import { precioUnitarioPara, type Escala } from '@/lib/ventas/presentaciones'
+import { aplicarPromociones, type Promocion } from '@/lib/ventas/promociones'
 
 interface Prod {
-  id: string; nombre: string; codigoBarras: string | null; codigoBalanza?: string | null; categoriaNombre: string | null
+  id: string; nombre: string; codigoBarras: string | null; codigoBalanza?: string | null; categoriaNombre: string | null; categoriaId?: string | null
   precioVenta: number; ivaPorcentaje: number; stock: number; unidad: string; imagen?: string | null
   presentaciones?: Presentacion[]; escalas?: Escala[]
 }
@@ -33,8 +34,8 @@ const unidadesEnCarrito = (c: ItemCarrito[], productoId: string, excepto?: strin
   c.filter((it) => it.id === productoId && it.key !== excepto).reduce((s, it) => s + it.cantidad * (it.pres?.factor ?? 1), 0)
 interface ClienteSel { id: string; nombre: string; identificacion: string; telefono?: string | null; email?: string | null; direccion?: string | null }
 
-export function POSClient({ productos, categorias, cajaAbierta, balanza, cajasLibres = null }: {
-  productos: Prod[]; categorias: Cat[]; cajaAbierta: boolean; balanza: ConfigBalanza
+export function POSClient({ productos, categorias, cajaAbierta, balanza, cajasLibres = null, promociones = [] }: {
+  productos: Prod[]; categorias: Cat[]; cajaAbierta: boolean; balanza: ConfigBalanza; promociones?: Promocion[]
   cajasLibres?: { id: string; nombre: string }[] | null // varias cajas: las que se pueden abrir; null = una sola caja
 }) {
   // Sin caja abierta no se vende: se pide abrirla con su fondo inicial.
@@ -42,6 +43,11 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza, cajasLi
   const [busqueda, setBusqueda] = useState('')
   const [catFiltro, setCatFiltro] = useState<string | null>(null)
   const [carrito, setCarrito] = useState<ItemCarrito[]>([])
+  // Promociones vigentes (mismo motor que el servidor, que es el que decide al cobrar)
+  const promosCarrito = useMemo(() => aplicarPromociones(
+    carrito.map((it) => ({ key: it.key, productoId: it.id, categoriaId: it.categoriaId ?? null, cantidad: it.cantidad, precioUnitario: precioLinea(it), conPresentacion: !!it.pres })),
+    promociones,
+  ), [carrito, promociones])
   const [formaPago, setFormaPago] = useState<'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO'>('EFECTIVO')
   const [requiereFactura, setRequiereFactura] = useState(true)
   const [pagoCon, setPagoCon] = useState('')
@@ -65,13 +71,14 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza, cajasLi
   // Totales: mismo cálculo que el servidor y la factura (lib/ventas/totales.ts)
   const [descuentoTxt, setDescuentoTxt] = useState('')
   const [descuentoEnPct, setDescuentoEnPct] = useState(false)
-  const { subtotal, iva, total, descuento } = useMemo(() => {
-    const lineas = carrito.map((it) => ({ cantidad: it.cantidad, precioUnitario: precioLinea(it), ivaPorcentaje: it.ivaPorcentaje }))
-    const bruto = calcularVenta(lineas, 0).subtotal
+  const { subtotal, iva, total, descuento, descuentoLineas } = useMemo(() => {
+    const lineas = carrito.map((it) => ({ cantidad: it.cantidad, precioUnitario: precioLinea(it), ivaPorcentaje: it.ivaPorcentaje, descuentoLinea: promosCarrito.get(it.key)?.descuento ?? 0 }))
+    const sinGlobal = calcularVenta(lineas, 0)
+    const bruto = sinGlobal.subtotal - sinGlobal.descuentoLineas // el descuento manual se calcula después de las promociones
     const valor = Math.max(0, Number(descuentoTxt) || 0)
     const monto = descuentoEnPct ? (bruto * Math.min(valor, 100)) / 100 : Math.min(valor, bruto)
     return calcularVenta(lineas, monto)
-  }, [carrito, descuentoTxt, descuentoEnPct])
+  }, [carrito, descuentoTxt, descuentoEnPct, promosCarrito])
 
   const vuelto = pagoCon ? Math.max(0, Number(pagoCon) - total) : 0
 
@@ -251,7 +258,10 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza, cajasLi
                 <CantidadEditable valor={it.cantidad} onCambiar={(v) => fijarCantidad(it.key, v)} etiqueta={`Cantidad de ${it.nombre}`} />
                 <button onClick={() => cambiarCantidad(it.key, 1)} className="p-1 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"><Plus size={13} /></button>
               </div>
-              <span className="w-16 text-right font-semibold text-gray-900 dark:text-white">{money(it.cantidad * precioLinea(it))}</span>
+              <span className="w-16 text-right font-semibold text-gray-900 dark:text-white">
+                {money(it.cantidad * precioLinea(it) - (promosCarrito.get(it.key)?.descuento ?? 0))}
+                {promosCarrito.get(it.key) && <span className="block text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 leading-tight" title={promosCarrito.get(it.key)!.promocion}>🏷 −{money(promosCarrito.get(it.key)!.descuento)}</span>}
+              </span>
               <button onClick={() => quitar(it.key)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
             </div>
           ))}
@@ -288,6 +298,7 @@ export function POSClient({ productos, categorias, cajaAbierta, balanza, cajasLi
           {/* Totales */}
           <div className="space-y-1 text-sm">
             <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{money(subtotal)}</span></div>
+            {descuentoLineas > 0 && <div className="flex justify-between text-emerald-600 dark:text-emerald-400"><span>🏷 Promociones</span><span>−{money(descuentoLineas)}</span></div>}
             {carrito.length > 0 && (
               <div className="flex items-center justify-between gap-2 text-gray-500">
                 <span>Descuento</span>

@@ -4,7 +4,7 @@
  * el botón "Enviar ahora" de Configuración → Operación.
  */
 import { prisma } from '@/lib/db/prisma'
-import { calcularVenta } from '@/lib/ventas/totales'
+import { calcularVenta, lineasDeItems } from '@/lib/ventas/totales'
 import { vencimientosEnStock } from '@/lib/inventario/vencimientos'
 import { CATEGORIAS_MERMA, esCategoriaMerma } from '@/lib/inventario/mermas'
 import { hoyLocalISO } from '@/lib/utils/fechas'
@@ -56,7 +56,7 @@ export async function calcularResumenDiario(tenantId: string, dia: string) {
   for (const v of ventas) {
     venta += Number(v.total)
     porForma.set(v.formaPago, (porForma.get(v.formaPago) ?? 0) + Number(v.total))
-    const calc = calcularVenta(v.items.map((it) => ({ cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje) })), Number(v.descuento))
+    const calc = calcularVenta(lineasDeItems(v.items), Number(v.descuento))
     v.items.forEach((it, i) => {
       const b = calc.lineas[i].base
       base += b

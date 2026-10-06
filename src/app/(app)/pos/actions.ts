@@ -13,6 +13,8 @@ import { aperturaDeUsuario } from '@/lib/caja/estado'
 import { usaControlCaja } from '@/lib/config/negocio'
 import { bloqueoPorSuscripcion, limiteDelPlan } from '@/lib/saas/suscripcion'
 import { precioUnitarioPara } from '@/lib/ventas/presentaciones'
+import { aplicarPromociones } from '@/lib/ventas/promociones'
+import { promocionesDeHoy } from '@/lib/ventas/promociones-db'
 
 const ventaSchema = z.object({
   clienteId: z.string().optional().or(z.literal('')),
@@ -115,10 +117,18 @@ export async function registrarVentaAction(data: VentaFormValues) {
 
     // Totales con el cálculo único (IVA por tarifa de cada producto, sobre la
     // base con descuento): los mismos que usará la factura electrónica.
+    // Promociones vigentes (2x1, %…): descuento propio de cada línea, decidido aquí.
+    const promos = aplicarPromociones(
+      d.items.map((it, i) => ({
+        key: String(i), productoId: it.productoId, categoriaId: mapProd.get(it.productoId)!.categoriaId,
+        cantidad: it.cantidad, precioUnitario: precioDe(it), conPresentacion: !!it.presentacionId,
+      })),
+      await promocionesDeHoy(sesion.tenantId),
+    )
     const calculo = calcularVenta(
-      d.items.map((it) => {
+      d.items.map((it, i) => {
         const prod = mapProd.get(it.productoId)!
-        return { cantidad: it.cantidad, precioUnitario: precioDe(it), ivaPorcentaje: Number(prod.ivaPorcentaje) }
+        return { cantidad: it.cantidad, precioUnitario: precioDe(it), ivaPorcentaje: Number(prod.ivaPorcentaje), descuentoLinea: promos.get(String(i))?.descuento ?? 0 }
       }),
       d.descuento || 0,
     )
@@ -162,6 +172,8 @@ export async function registrarVentaAction(data: VentaFormValues) {
               presentacionId: it.presentacionId || null,
               presentacion: it.presentacionId ? mapPres.get(it.presentacionId)!.nombre : null,
               factor: factorDe(it),
+              descuento: promos.get(String(i))?.descuento ?? 0,
+              promocion: promos.get(String(i))?.promocion ?? null,
             })),
           },
         },

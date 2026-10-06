@@ -53,7 +53,7 @@ async function yaDevuelto(ventaId: string, tx: Pick<typeof prisma, 'devolucionIt
 }
 
 const lineasOriginales = (venta: Awaited<ReturnType<typeof cargarVenta>>) =>
-  venta.items.map((it) => ({ id: it.id, cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje) }))
+  venta.items.map((it) => ({ id: it.id, cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje), descuentoLinea: Number(it.descuento) }))
 
 // ─── Datos para el formulario ─────────────────────────────────────────────────
 export async function obtenerDatosDevolucionAction(ventaId: string) {
@@ -73,7 +73,7 @@ export async function obtenerDatosDevolucionAction(ventaId: string) {
       },
       lineas: venta.items.map((it) => ({
         id: it.id, nombre: descripcionItem(it.producto.nombre, it.presentacion), unidad: it.presentacion ? 'presentación' : it.producto.unidad, cantidad: Number(it.cantidad),
-        precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje),
+        precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje), descuentoLinea: Number(it.descuento),
         devuelto: devuelto.get(it.id) ?? { cantidad: 0, descuento: 0, base: 0, iva: 0 },
       })),
       caja: { control, abierta: control ? !!(await aperturaDeUsuario(sesion.tenantId, sesion.sub)) : true },
@@ -107,7 +107,7 @@ async function aplicarDevolucion(p: {
     let calc: TotalesDevolucion
     try {
       calc = calcularDevolucion(
-        venta.items.map((it) => ({ id: it.id, cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje) })),
+        venta.items.map((it) => ({ id: it.id, cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario), ivaPorcentaje: Number(it.producto.ivaPorcentaje), descuentoLinea: Number(it.descuento) })),
         Number(venta.descuento), await yaDevuelto(venta.id, tx), new Map(p.d.items.map((i) => [i.ventaItemId, i.cantidad])),
       )
     } catch (e: any) { throw new ErrorNegocio(e.message) }

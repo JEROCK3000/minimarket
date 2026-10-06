@@ -59,7 +59,7 @@ export async function obtenerTicketAction(ventaId: string): Promise<{ success: t
             nombre: descripcionItem(it.producto.nombre, it.presentacion), cantidad: Number(it.cantidad),
             precioUnitario: Number(it.precioUnitario), subtotal: Number(it.subtotal),
           })),
-          subtotal: Number(venta.subtotal), descuento: Number(venta.descuento),
+          subtotal: Number(venta.subtotal), descuento: Number(venta.descuento) + venta.items.reduce((acc, it) => acc + Number(it.descuento), 0), // global + promociones
           iva: Number(venta.iva), total: Number(venta.total),
           pagoCon: venta.pagoCon ? Number(venta.pagoCon) : null,
           vuelto: venta.pagoCon ? Math.max(0, Number(venta.pagoCon) - Number(venta.total)) : null,

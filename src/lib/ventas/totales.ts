@@ -12,11 +12,12 @@ export interface LineaVenta {
   cantidad: number
   precioUnitario: number
   ivaPorcentaje: number
+  descuentoLinea?: number // descuento propio de la línea (promoción 2x1, % …); 0 si no hay
 }
 
 export interface LineaCalculada extends LineaVenta {
   subtotal: number  // cantidad × precio, antes de descuento
-  descuento: number // parte del descuento global
+  descuento: number // descuento de la línea + su parte del descuento global
   base: number      // subtotal − descuento (base imponible)
   iva: number
 }
@@ -24,7 +25,9 @@ export interface LineaCalculada extends LineaVenta {
 export interface TotalesVenta {
   lineas: LineaCalculada[]
   subtotal: number  // suma de subtotales (antes de descuento)
-  descuento: number
+  descuento: number // descuento GLOBAL (manual) aplicado
+  descuentoLineas: number // suma de descuentos por línea (promociones)
+  descuentoTotal: number  // global + líneas: el "Total descuento" de la factura
   base: number      // total sin impuestos
   iva: number
   total: number
@@ -36,18 +39,24 @@ export const redondear2 = (n: number) => Math.round((n + Number.EPSILON) * 100) 
 export function calcularVenta(lineas: LineaVenta[], descuentoGlobal = 0): TotalesVenta {
   const subtotales = lineas.map((l) => redondear2(l.cantidad * l.precioUnitario))
   const subtotal = redondear2(subtotales.reduce((a, b) => a + b, 0))
-  const descuento = redondear2(Math.min(Math.max(descuentoGlobal, 0), subtotal))
+  // Descuento propio de cada línea (promociones), nunca mayor que la línea
+  const descLinea = lineas.map((l, i) => redondear2(Math.min(Math.max(l.descuentoLinea ?? 0, 0), subtotales[i])))
+  const netos = subtotales.map((st, i) => redondear2(st - descLinea[i]))
+  const neto = redondear2(netos.reduce((a, b) => a + b, 0))
+  // El descuento global (manual) se prorratea sobre lo que queda tras las promociones
+  const descuento = redondear2(Math.min(Math.max(descuentoGlobal, 0), neto))
 
   let descuentoRestante = descuento
   const calculadas: LineaCalculada[] = lineas.map((l, i) => {
     const esUltima = i === lineas.length - 1
     const desc = esUltima
       ? descuentoRestante
-      : subtotal > 0 ? redondear2((descuento * subtotales[i]) / subtotal) : 0
+      : neto > 0 ? redondear2((descuento * netos[i]) / neto) : 0
     descuentoRestante = redondear2(descuentoRestante - desc)
-    const base = redondear2(subtotales[i] - desc)
-    return { ...l, subtotal: subtotales[i], descuento: desc, base, iva: redondear2((base * l.ivaPorcentaje) / 100) }
+    const base = redondear2(netos[i] - desc)
+    return { ...l, subtotal: subtotales[i], descuento: redondear2(descLinea[i] + desc), base, iva: redondear2((base * l.ivaPorcentaje) / 100) }
   })
+  const descuentoLineas = redondear2(descLinea.reduce((a, b) => a + b, 0))
 
   const porTarifaMap = new Map<number, { base: number; iva: number }>()
   for (const l of calculadas) {
@@ -61,9 +70,19 @@ export function calcularVenta(lineas: LineaVenta[], descuentoGlobal = 0): Totale
     lineas: calculadas,
     subtotal,
     descuento,
+    descuentoLineas,
+    descuentoTotal: redondear2(descuento + descuentoLineas),
     base,
     iva,
     total: redondear2(base + iva),
     porTarifa: [...porTarifaMap.entries()].sort((a, b) => b[0] - a[0]).map(([tarifa, v]) => ({ tarifa, ...v })),
   }
+}
+
+/** Líneas para calcularVenta desde los ítems guardados de una venta (incluye el descuento de promoción). */
+export function lineasDeItems(items: { cantidad: unknown; precioUnitario: unknown; descuento?: unknown; producto: { ivaPorcentaje: unknown } }[]): LineaVenta[] {
+  return items.map((it) => ({
+    cantidad: Number(it.cantidad), precioUnitario: Number(it.precioUnitario),
+    ivaPorcentaje: Number(it.producto.ivaPorcentaje), descuentoLinea: Number(it.descuento ?? 0),
+  }))
 }
