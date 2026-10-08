@@ -25,6 +25,8 @@ interface Props {
   sugerirRegistrados?: boolean
   /** Cliente registrado elegido de la lista cuyo documento no es cédula/RUC (pasaporte) */
   onSeleccionRegistrado?: (c: ClienteRegistrado) => void
+  /** Dentro de un modal con scroll: la lista de sugerencias va en el flujo (no flotante) para que no se recorte. */
+  listaEnLinea?: boolean
 }
 
 interface EstadoPersona { clase: ClaseIdentificacion; cedula: string | null; ruc: string | null; tieneRuc: boolean | null }
@@ -48,7 +50,7 @@ const ETIQUETA_TIPO: Record<string, string> = { CEDULA: 'Cédula', RUC: 'RUC', P
  */
 export function IdentificacionInput({
   identificacion, tipo, onChange, onEncontrado, onSinResultado,
-  consultaAutomatica = true, sugerirRegistrados = false, onSeleccionRegistrado,
+  consultaAutomatica = true, sugerirRegistrados = false, onSeleccionRegistrado, listaEnLinea = false,
 }: Props) {
   const [modoOtro, setModoOtro] = useState(tipo === 'PASAPORTE')
   const [persona, setPersona] = useState<EstadoPersona | null>(() => {
@@ -265,7 +267,7 @@ export function IdentificacionInput({
             <ul
               id="lista-clientes-registrados"
               role="listbox"
-              className="absolute z-20 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15152a] shadow-lg py-1"
+              className={`${listaEnLinea ? 'relative max-h-[45vh]' : 'absolute z-20 left-0 right-0 max-h-64 shadow-lg'} mt-1 overflow-y-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15152a] py-1`}
             >
               {!identificacion.trim() && (
                 <li className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Recientes</li>

@@ -447,6 +447,7 @@ function ClienteModal({ onClose, onSelect }: { onClose: () => void; onSelect: (c
             onEncontrado={alEncontrar}
             onSinResultado={sinResultado}
             sugerirRegistrados
+            listaEnLinea
             onSeleccionRegistrado={alElegirRegistrado}
           />
           {!mostrarForm && f.tipoIdentificacion === 'PASAPORTE' && (
